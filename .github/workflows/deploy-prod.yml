@@ -1,0 +1,58 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      - name: Build all
+        run: |
+          npm run build -w packages/shared
+          npm run build -w packages/server
+          npm run build -w packages/client
+      
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      
+      - name: Deploy Infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: brolonist-prod
+          template: infra/azure/main.bicep
+          parameters: infra/azure/parameters/prod.bicepparam
+      
+      - name: Deploy Server
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: brolonist-prod-api
+          package: packages/server
+      
+      - name: Deploy Client
+        uses: azure/static-web-apps-deploy@v1
+        with:
+          app_location: packages/client
+          output_location: dist
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_SWA_TOKEN }}

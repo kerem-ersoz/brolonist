@@ -1,9 +1,18 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import { registerAuth } from './auth/session.js';
+import { authRoutes } from './routes/auth.js';
+import { healthRoutes } from './routes/health.js';
 
 const app = Fastify({ logger: true });
 
-// Health check
-app.get('/health', async () => ({ status: 'ok' }));
+// Register plugins
+await app.register(cors, { origin: true, credentials: true });
+await registerAuth(app);
+
+// Register routes
+await app.register(healthRoutes);
+await app.register(authRoutes);
 
 const port = Number(process.env.PORT) || 8080;
 const host = process.env.HOST || '0.0.0.0';

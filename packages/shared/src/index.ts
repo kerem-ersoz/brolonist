@@ -7,3 +7,6 @@ export * from './types/messages.js';
 export * from './hex/coordinates.js';
 export * from './hex/math.js';
 export * from './hex/board-layout.js';
+export * from './game/board.js';
+export * from './game/rules.js';
+export * from './game/engine.js';

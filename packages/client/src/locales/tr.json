@@ -1,0 +1,13 @@
+{
+  "app": { "title": "Brolonist" },
+  "auth": { "login": "Giriş Yap", "guest": "Misafir Olarak Giriş", "guestName": "İsminizi girin", "loginWith": "{{provider}} ile giriş yap", "logout": "Çıkış Yap" },
+  "lobby": { "title": "Oyun Lobisi", "createGame": "Oyun Oluştur", "joinGame": "Oyuna Katıl", "gameName": "Oyun Adı", "maxPlayers": "Maksimum Oyuncu", "mapType": "Harita Türü", "victoryPoints": "Zafer Puanı", "private": "Özel Oyun", "password": "Şifre", "ready": "Hazır", "notReady": "Hazır Değil", "startGame": "Oyunu Başlat", "waitingForPlayers": "Oyuncular bekleniyor...", "addBot": "Bot Ekle", "removeBot": "Botu Kaldır" },
+  "game": { "yourTurn": "Sıra sende!", "rollDice": "Zar At", "endTurn": "Sırayı Bitir", "build": "İnşa Et", "trade": "Ticaret", "buyDevCard": "Gelişim Kartı Al", "playDevCard": "Gelişim Kartı Oyna", "cancel": "İptal" },
+  "buildings": { "road": "Yol", "settlement": "Yerleşim", "city": "Şehir" },
+  "resources": { "brick": "Tuğla", "lumber": "Kereste", "ore": "Maden", "grain": "Tahıl", "wool": "Yün" },
+  "trade": { "offer": "Teklif", "give": "Ver", "want": "İste", "propose": "Teklif Et", "accept": "Kabul Et", "decline": "Reddet", "counter": "Karşı Teklif", "bankTrade": "Banka Ticareti", "noOffers": "Aktif teklif yok" },
+  "devCards": { "knight": "Şövalye", "victoryPoint": "Zafer Puanı", "roadBuilding": "Yol Yapımı", "yearOfPlenty": "Bolluk Yılı", "monopoly": "Tekel" },
+  "map": { "standard": "Standart", "random": "Rastgele", "pangaea": "Pangaea", "archipelago": "Takımadalar", "richCoast": "Zengin Kıyı", "desertRing": "Çöl Halkası" },
+  "status": { "connected": "Bağlandı", "reconnecting": "Yeniden bağlanıyor...", "disconnected": "Bağlantı kesildi" },
+  "common": { "players": "Oyuncular", "settings": "Ayarlar", "language": "Dil", "close": "Kapat", "confirm": "Onayla", "back": "Geri" }
+}

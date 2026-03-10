@@ -295,16 +295,9 @@ Roll Dice → Distribute Resources → (If 7: Discard + Robber) → Actions (Bui
 
 - **Roll button** — large, centered or bottom-center; shows two dice icons. Pulses when it's the player's turn to roll.
 - **Click to roll:**
-  - Two 3D dice animate (tumble/bounce) for ≈1–1.5 seconds before landing.
-  - The result appears as large bold numerals next to or above the dice.
-  - If the result is **7**, the numerals flash red and a warning icon appears.
+  - The results of the roll appear as 2D faces of dice with pips. 
+  - If the result is **7**, a sound effect is played.
 - **Auto-roll option** — a settings toggle for faster games; dice roll automatically after a brief delay.
-
-### Dice Roll Animation
-
-- Dice start at random orientations and tumble with a physics-like bounce.
-- Final face is revealed with a brief "lock-in" shake.
-- The sum is displayed prominently (60–80 px font) for 2–3 seconds, then shrinks into the game log.
 
 ### Resource Distribution Popup
 

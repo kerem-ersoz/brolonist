@@ -6,3 +6,4 @@ export * from './types/resources.js';
 export * from './types/messages.js';
 export * from './hex/coordinates.js';
 export * from './hex/math.js';
+export * from './hex/board-layout.js';

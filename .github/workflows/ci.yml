@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: brolonist
+          POSTGRES_PASSWORD: brolonist
+          POSTGRES_DB: brolonist
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      - name: Build shared package
+        run: npm run build -w packages/shared
+      
+      - name: Type check
+        run: |
+          npx -w packages/shared tsc --noEmit
+          npx -w packages/server tsc --noEmit
+          npx -w packages/client tsc --noEmit
+      
+      - name: Test shared
+        run: npm run test -w packages/shared
+      
+      - name: Test server
+        run: npm run test -w packages/server
+        env:
+          DATABASE_URL: postgresql://brolonist:brolonist@localhost:5432/brolonist
+          REDIS_URL: redis://localhost:6379
+      
+      - name: Build client
+        run: npm run build -w packages/client

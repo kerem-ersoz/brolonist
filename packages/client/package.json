@@ -16,10 +16,11 @@
   },
   "dependencies": {
     "@brolonist/shared": "*",
-    "i18next": "^24.0.0",
+    "i18next": "^24.2.3",
+    "i18next-browser-languagedetector": "^8.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-i18next": "^15.0.0",
+    "react-i18next": "^15.7.4",
     "react-router-dom": "^7.0.0",
     "zustand": "^5.0.0"
   },

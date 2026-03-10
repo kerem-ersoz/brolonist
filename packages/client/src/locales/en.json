@@ -1,0 +1,13 @@
+{
+  "app": { "title": "Brolonist" },
+  "auth": { "login": "Log In", "guest": "Play as Guest", "guestName": "Enter your name", "loginWith": "Log in with {{provider}}", "logout": "Log Out" },
+  "lobby": { "title": "Game Lobby", "createGame": "Create Game", "joinGame": "Join Game", "gameName": "Game Name", "maxPlayers": "Max Players", "mapType": "Map Type", "victoryPoints": "Victory Points", "private": "Private Game", "password": "Password", "ready": "Ready", "notReady": "Not Ready", "startGame": "Start Game", "waitingForPlayers": "Waiting for players...", "addBot": "Add Bot", "removeBot": "Remove Bot" },
+  "game": { "yourTurn": "Your turn!", "rollDice": "Roll Dice", "endTurn": "End Turn", "build": "Build", "trade": "Trade", "buyDevCard": "Buy Dev Card", "playDevCard": "Play Dev Card", "cancel": "Cancel" },
+  "buildings": { "road": "Road", "settlement": "Settlement", "city": "City" },
+  "resources": { "brick": "Brick", "lumber": "Lumber", "ore": "Ore", "grain": "Grain", "wool": "Wool" },
+  "trade": { "offer": "Offer", "give": "Give", "want": "Want", "propose": "Propose Trade", "accept": "Accept", "decline": "Decline", "counter": "Counter", "bankTrade": "Bank Trade", "noOffers": "No active offers" },
+  "devCards": { "knight": "Knight", "victoryPoint": "Victory Point", "roadBuilding": "Road Building", "yearOfPlenty": "Year of Plenty", "monopoly": "Monopoly" },
+  "map": { "standard": "Standard", "random": "Random", "pangaea": "Pangaea", "archipelago": "Archipelago", "richCoast": "Rich Coast", "desertRing": "Desert Ring" },
+  "status": { "connected": "Connected", "reconnecting": "Reconnecting...", "disconnected": "Disconnected" },
+  "common": { "players": "Players", "settings": "Settings", "language": "Language", "close": "Close", "confirm": "Confirm", "back": "Back" }
+}

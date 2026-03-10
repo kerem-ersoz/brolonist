@@ -5,6 +5,7 @@ import { registerAuth } from './auth/session.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 import { lobbyRoutes } from './routes/lobby.js';
+import { profileRoutes } from './routes/profile.js';
 import { handleConnection } from './ws/handler.js';
 
 const app = Fastify({ logger: true });
@@ -33,6 +34,7 @@ app.get('/ws', { websocket: true }, (socket, request) => {
 await app.register(healthRoutes);
 await app.register(authRoutes);
 await app.register(lobbyRoutes);
+await app.register(profileRoutes);
 
 const port = Number(process.env.PORT) || 8080;
 const host = process.env.HOST || '0.0.0.0';

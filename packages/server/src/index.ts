@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import { registerAuth } from './auth/session.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { lobbyRoutes } from './routes/lobby.js';
 
 const app = Fastify({ logger: true });
 
@@ -13,6 +14,7 @@ await registerAuth(app);
 // Register routes
 await app.register(healthRoutes);
 await app.register(authRoutes);
+await app.register(lobbyRoutes);
 
 const port = Number(process.env.PORT) || 8080;
 const host = process.env.HOST || '0.0.0.0';

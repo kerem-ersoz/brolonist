@@ -1,18 +1,20 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { LoginPage } from './components/Auth/LoginPage';
+import { LobbyPage } from './components/Lobby/LobbyPage';
+import { useAuth } from './hooks/useAuth';
 
-function Home() {
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
-      <h1 className="text-4xl font-bold">Brolonist</h1>
-    </div>
-  );
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" />;
+  return <>{children}</>;
 }
 
 export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<ProtectedRoute><LobbyPage /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );

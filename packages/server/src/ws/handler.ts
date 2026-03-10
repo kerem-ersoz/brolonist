@@ -1,5 +1,20 @@
 import type { WebSocket } from 'ws';
 import { hub } from './hub.js';
+import {
+  handleStartGame,
+  handleRollDice,
+  handlePlaceSettlement,
+  handlePlaceRoad,
+  handlePlaceCity,
+  handleBuyDevCard,
+  handlePlayDevCard,
+  handleMoveRobber,
+  handleDiscardCards,
+  handleTradeOffer,
+  handleTradeRespond,
+  handleTradeWithBank,
+  handleEndTurn,
+} from './gameHandler.js';
 
 interface WsMessage {
   type: string;
@@ -38,7 +53,46 @@ function handleMessage(playerId: string, msg: WsMessage): void {
     case 'chat':
       handleChat(playerId, msg.payload as { message: string });
       break;
-    // Game actions will be added in ws-game-handler todo
+    // Game actions — delegated to gameHandler
+    case 'start_game':
+      handleStartGame(playerId, msg.payload as Parameters<typeof handleStartGame>[1]);
+      break;
+    case 'roll_dice':
+      handleRollDice(playerId, getGameId(playerId));
+      break;
+    case 'place_settlement':
+      handlePlaceSettlement(playerId, getGameId(playerId), msg.payload as Parameters<typeof handlePlaceSettlement>[2]);
+      break;
+    case 'place_road':
+      handlePlaceRoad(playerId, getGameId(playerId), msg.payload as Parameters<typeof handlePlaceRoad>[2]);
+      break;
+    case 'place_city':
+      handlePlaceCity(playerId, getGameId(playerId), msg.payload as Parameters<typeof handlePlaceCity>[2]);
+      break;
+    case 'buy_dev_card':
+      handleBuyDevCard(playerId, getGameId(playerId));
+      break;
+    case 'play_dev_card':
+      handlePlayDevCard(playerId, getGameId(playerId), msg.payload as Parameters<typeof handlePlayDevCard>[2]);
+      break;
+    case 'move_robber':
+      handleMoveRobber(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleMoveRobber>[2]);
+      break;
+    case 'discard_cards':
+      handleDiscardCards(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleDiscardCards>[2]);
+      break;
+    case 'trade_offer':
+      handleTradeOffer(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeOffer>[2]);
+      break;
+    case 'trade_respond':
+      handleTradeRespond(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeRespond>[2]);
+      break;
+    case 'trade_with_bank':
+      handleTradeWithBank(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeWithBank>[2]);
+      break;
+    case 'end_turn':
+      handleEndTurn(playerId, getGameId(playerId));
+      break;
     default:
       hub.send(playerId, 'error', { code: 'UNKNOWN_TYPE', message: `Unknown message type: ${msg.type}` });
   }
@@ -71,4 +125,8 @@ function handleChat(playerId: string, payload: { message: string }): void {
   if (client?.gameId) {
     hub.broadcast(client.gameId, 'chat', { playerId, message: payload.message });
   }
+}
+
+function getGameId(playerId: string): string {
+  return hub.getClient(playerId)?.gameId ?? '';
 }

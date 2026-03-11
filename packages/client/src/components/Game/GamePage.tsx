@@ -22,12 +22,17 @@ export function GamePage() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
 
-  // Reset game and lobby state when entering a new game page
+  // Reset game and lobby state when gameId changes
   const resetGame = useGameStore((s) => s.reset);
   const clearLobby = useLobbyStore((s) => s.setCurrentLobby);
+  const prevGameId = useState(gameId)[0];
   useEffect(() => {
-    resetGame();
-    clearLobby(null);
+    // Only reset when gameId actually changes (not on initial mount before WS)
+    return () => {
+      // Cleanup: clear state when leaving this page
+      resetGame();
+      clearLobby(null);
+    };
   }, [gameId, resetGame, clearLobby]);
 
   const { sendMessage, connectionStatus } = useWebSocket(gameId || null);
@@ -154,7 +159,7 @@ export function GamePage() {
   }
 
   if (!gameState) {
-    if (connectionStatus === 'connected' && currentLobby) {
+    if (connectionStatus === 'connected' && currentLobby && myPlayerId) {
       return (
         <GameWaitingRoom
           lobby={currentLobby}

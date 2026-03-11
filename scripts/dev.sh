@@ -10,7 +10,10 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-# Source env vars
+# Symlink .env into packages/server for Prisma
+ln -sf ../../.env packages/server/.env 2>/dev/null || true
+
+# Source env vars so child processes inherit them
 set -a; source .env; set +a
 
 echo "🐳 Starting Docker services (PostgreSQL + Redis)..."
@@ -29,32 +32,52 @@ done
 echo "✅ Redis ready"
 
 echo "📦 Installing dependencies..."
-npm install
+npm install --silent
 
 echo "🔨 Building shared package..."
 npm run build -w packages/shared
 
-# TODO: Run Prisma migrations when schema is set up
-# echo "🗃️ Running database migrations..."
-# npx -w packages/server prisma migrate deploy
+echo "🗃️  Pushing database schema..."
+npx -w packages/server prisma db push --skip-generate 2>/dev/null || true
+npx -w packages/server prisma generate 2>/dev/null || true
 
 echo "🚀 Starting server..."
 npm run dev -w packages/server &
 SERVER_PID=$!
 
+# Wait for server to be ready
+echo "⏳ Waiting for server..."
+for i in $(seq 1 30); do
+  curl -s http://localhost:${PORT:-8080}/health > /dev/null 2>&1 && break || sleep 1
+done
+echo "✅ Server ready"
+
 echo "🌐 Starting client..."
 npm run dev -w packages/client &
 CLIENT_PID=$!
 
+sleep 2
+# Detect actual client port (5173 may be in use)
+CLIENT_PORT=$(lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null | grep "$CLIENT_PID\|vite" | grep -oE ':[0-9]+' | head -1 | tr -d ':')
+CLIENT_PORT=${CLIENT_PORT:-5173}
+
 echo ""
 echo "═══════════════════════════════════════"
-echo "  Brolonist dev environment running!"
-echo "  Client:  http://localhost:5173"
-echo "  Server:  http://localhost:8080"
-echo "  Health:  http://localhost:8080/health"
+echo "  🎲 Brolonist dev environment running!"
+echo ""
+echo "  Client:  http://localhost:${CLIENT_PORT}"
+echo "  Server:  http://localhost:${PORT:-8080}"
+echo "  Health:  http://localhost:${PORT:-8080}/health"
 echo "═══════════════════════════════════════"
 echo ""
 echo "Press Ctrl+C to stop all services."
 
-trap "kill $SERVER_PID $CLIENT_PID 2>/dev/null; docker compose down; echo 'Stopped.'" EXIT
+cleanup() {
+  echo ""
+  echo "🛑 Shutting down..."
+  kill $SERVER_PID $CLIENT_PID 2>/dev/null
+  wait $SERVER_PID $CLIENT_PID 2>/dev/null
+  echo "Stopped."
+}
+trap cleanup EXIT INT TERM
 wait

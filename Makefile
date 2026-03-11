@@ -10,6 +10,7 @@ stop:
 	@docker compose down 2>/dev/null || true
 	@lsof -ti:8080 | xargs kill 2>/dev/null || true
 	@lsof -ti:5173 | xargs kill 2>/dev/null || true
+	@lsof -ti:5174 | xargs kill 2>/dev/null || true
 	@echo "All services stopped."
 
 # Build all packages

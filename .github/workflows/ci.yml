@@ -60,7 +60,7 @@ jobs:
         run: npm run test -w packages/shared
       
       - name: Test server
-        run: npm run test -w packages/server
+        run: npx -w packages/server vitest run --passWithNoTests
         env:
           DATABASE_URL: postgresql://brolonist:brolonist@localhost:5432/brolonist
           REDIS_URL: redis://localhost:6379

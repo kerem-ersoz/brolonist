@@ -8,6 +8,8 @@ import {
   VertexId,
   EdgeId,
   vertexAdjacentHexes,
+  vertexAdjacentEdges,
+  edgeEquals,
   hexEquals,
 } from '../hex/coordinates.js';
 import {
@@ -49,6 +51,9 @@ export function handleSetupSettlement(
   });
   player.settlementsBuilt += 1;
 
+  // Track which settlement was just placed so road must be adjacent to it
+  state.lastSetupSettlement = vertex;
+
   return null;
 }
 
@@ -72,6 +77,15 @@ export function handleSetupRoad(
 
   const error = canPlaceRoad(state, playerId, edge, true);
   if (error) return error;
+
+  // During setup, road must be adjacent to the settlement just placed
+  if (state.lastSetupSettlement) {
+    const adjEdges = vertexAdjacentEdges(state.lastSetupSettlement as VertexId);
+    const isAdjacentToLastSettlement = adjEdges.some(ae => edgeEquals(ae, edge));
+    if (!isAdjacentToLastSettlement) {
+      return 'Road must be adjacent to the settlement you just placed';
+    }
+  }
 
   // Place road (free during setup)
   state.board.edgeBuildings.set(edgeKey(edge), {
@@ -134,4 +148,5 @@ export function advanceSetupPhase(state: GameState): void {
 
   // Next player always starts by placing a settlement
   state.setupAction = 'settlement';
+  state.lastSetupSettlement = null;
 }

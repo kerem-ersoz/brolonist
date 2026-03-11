@@ -71,6 +71,7 @@ import {
   updateLongestRoadHolder,
   hasResources,
   subtractResources,
+  vertexAdjacentEdges,
 } from '@brolonist/shared';
 
 import { hub } from './hub.js';
@@ -188,6 +189,7 @@ export function initializeGame(
     turnNumber: 0,
     setupRound: 1,
     setupAction: 'settlement',
+    lastSetupSettlement: null,
     activeTradeOffers: [],
     pendingDiscards: [],
     specialBuildOrder: [],
@@ -756,8 +758,12 @@ function botSetupTurn(gameId: string, state: GameState, bot: Player): void {
   state.setupAction = 'road';
   addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup, bot)', playerId: bot.id });
 
-  // Place a road at a random valid location
-  const validRoads = getValidRoadLocations(state, bot.id, true);
+  // Place a road adjacent to the settlement just placed
+  const adjEdges = vertexAdjacentEdges(settlement);
+  const validRoads = adjEdges.filter(e => {
+    const key = edgeKey(e);
+    return !state.board.edgeBuildings.has(key);
+  });
   if (validRoads.length === 0) return;
 
   const road = validRoads[Math.floor(Math.random() * validRoads.length)];

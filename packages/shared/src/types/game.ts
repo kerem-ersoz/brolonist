@@ -149,6 +149,7 @@ export interface GameState {
   turnNumber: number;
   setupRound: 1 | 2;
   setupAction: 'settlement' | 'road';
+  lastSetupSettlement: { hex: { q: number; r: number }; direction: string } | null;
 
   activeTradeOffers: TradeOffer[];
 

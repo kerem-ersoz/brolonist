@@ -58,7 +58,7 @@ export function useWebSocket(gameId: string | null) {
             setError(msg.payload.message);
             break;
           case 'game_ended':
-            setGameState(msg.payload);
+            useGameStore.getState().setGameResult(msg.payload);
             break;
           default:
             // Log events like chat, dice_rolled, player_joined, etc.

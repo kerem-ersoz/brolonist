@@ -23,6 +23,7 @@ interface PlayerView {
   knightsPlayed: number;
   hasLongestRoad: boolean;
   hasLargestArmy: boolean;
+  harbors?: string[];
   roadsBuilt: number;
   settlementsBuilt: number;
   citiesBuilt: number;
@@ -40,6 +41,7 @@ interface GameStateView {
   dice: [number, number];
   turnNumber: number;
   setupRound: number;
+  setupAction?: 'settlement' | 'road';
   activeTradeOffers: unknown[];
   pendingDiscards: string[];
   longestRoadHolder: string | null;
@@ -48,12 +50,19 @@ interface GameStateView {
   log: Array<{ timestamp: string; playerId?: string; type: string; message: string }>;
 }
 
+interface GameResult {
+  winnerId: string;
+  winnerName: string;
+  victoryPoints: number;
+}
+
 interface GameStore {
   // State
   gameState: GameStateView | null;
   myPlayerId: string | null;
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
   lastError: string | null;
+  gameResult: GameResult | null;
 
   // Derived getters
   isMyTurn: () => boolean;
@@ -66,17 +75,19 @@ interface GameStore {
   setConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected') => void;
   setMyPlayerId: (id: string) => void;
   setError: (error: string | null) => void;
+  setGameResult: (result: GameResult) => void;
   addLogEntry: (entry: GameStateView['log'][0]) => void;
   reset: () => void;
 }
 
-export type { GameStateView, PlayerView, Resources, GameStore };
+export type { GameStateView, PlayerView, Resources, GameStore, GameResult };
 
 export const useGameStore = create<GameStore>((set, get) => ({
   gameState: null,
   myPlayerId: null,
   connectionStatus: 'disconnected',
   lastError: null,
+  gameResult: null,
 
   isMyTurn: () => {
     const { gameState, myPlayerId } = get();
@@ -105,6 +116,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setMyPlayerId: (myPlayerId) => set({ myPlayerId }),
   setError: (lastError) => set({ lastError }),
+  setGameResult: (gameResult) => set({ gameResult }),
 
   addLogEntry: (entry) => set((s) => ({
     gameState: s.gameState
@@ -112,5 +124,5 @@ export const useGameStore = create<GameStore>((set, get) => ({
       : null,
   })),
 
-  reset: () => set({ gameState: null, myPlayerId: null, lastError: null }),
+  reset: () => set({ gameState: null, myPlayerId: null, lastError: null, gameResult: null }),
 }));

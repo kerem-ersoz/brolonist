@@ -13,8 +13,10 @@ import {
   handleTradeRespond,
   handleTradeWithBank,
   handleEndTurn,
+  handlePassSpecialBuild,
   getGame,
   initializeGame,
+  scheduleBotTurn,
   type PlayerInit,
 } from './gameHandler.js';
 import { filterStateForPlayer } from './sync.js';
@@ -114,6 +116,9 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
       break;
     case 'end_turn':
       handleEndTurn(playerId, getGameId(playerId));
+      break;
+    case 'pass_special_build':
+      handlePassSpecialBuild(playerId, getGameId(playerId));
       break;
     default:
       hub.send(playerId, 'error', { code: 'UNKNOWN_TYPE', message: `Unknown message type: ${msg.type}` });
@@ -256,6 +261,9 @@ function handleStartGameFromLobby(playerId: string): void {
   for (const pid of members) {
     hub.send(pid, 'game_state', filterStateForPlayer(state, pid));
   }
+
+  // Trigger bot turns if the first player is a bot
+  scheduleBotTurn(gameId);
 }
 
 function handleChat(playerId: string, payload: { message: string }): void {

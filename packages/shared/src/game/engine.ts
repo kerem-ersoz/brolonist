@@ -22,18 +22,22 @@ import {
 /** Advance to next player (clockwise). */
 export function nextPlayerIndex(state: GameState): number {
   let idx = state.currentPlayerIndex;
+  const startIdx = idx;
   do {
     idx = (idx + 1) % state.players.length;
-  } while (state.players[idx].status === PlayerStatus.Quit && idx !== state.currentPlayerIndex);
+    if (idx === startIdx) break; // All players quit — avoid infinite loop
+  } while (state.players[idx].status === PlayerStatus.Quit);
   return idx;
 }
 
 /** Advance to previous player (counter-clockwise, for setup round 2). */
 export function prevPlayerIndex(state: GameState): number {
   let idx = state.currentPlayerIndex;
+  const startIdx = idx;
   do {
     idx = (idx - 1 + state.players.length) % state.players.length;
-  } while (state.players[idx].status === PlayerStatus.Quit && idx !== state.currentPlayerIndex);
+    if (idx === startIdx) break; // All players quit — avoid infinite loop
+  } while (state.players[idx].status === PlayerStatus.Quit);
   return idx;
 }
 
@@ -120,6 +124,19 @@ export function endTurn(state: GameState): void {
     state.currentPlayerIndex = nextPlayerIndex(state);
     state.turnNumber++;
     state.currentPhase = GamePhase.RollDice;
+  }
+}
+
+/** Advance to the next player in the special build phase, or transition to the next turn. */
+export function advanceSpecialBuild(state: GameState): void {
+  state.specialBuildCurrentIndex++;
+  if (state.specialBuildCurrentIndex >= state.specialBuildOrder.length) {
+    // All players had their chance — advance to next player's roll
+    state.currentPlayerIndex = nextPlayerIndex(state);
+    state.turnNumber++;
+    state.currentPhase = GamePhase.RollDice;
+    state.specialBuildOrder = [];
+    state.specialBuildCurrentIndex = 0;
   }
 }
 

@@ -156,8 +156,13 @@ export function GamePage() {
           showTrade && me ? (
             <TradePanel
               myResources={me.resources as unknown as Record<string, number>}
-              activeOffers={[]}
-              harbors={[]}
+              activeOffers={(gameState.activeTradeOffers as Array<{ id: string; fromPlayerId: string; offering: Record<string, number>; requesting: Record<string, number> }>).map(o => ({
+                id: o.id,
+                fromPlayerName: playerNames[o.fromPlayerId]?.name ?? 'Unknown',
+                offering: o.offering,
+                requesting: o.requesting,
+              }))}
+              harbors={me.harbors ?? []}
               onPropose={(offering, requesting) => sendMessage('trade_offer', { offering, requesting })}
               onAccept={(offerId) => sendMessage('trade_respond', { offerId, response: 'accept' })}
               onDecline={(offerId) => sendMessage('trade_respond', { offerId, response: 'decline' })}

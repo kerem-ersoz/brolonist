@@ -1,14 +1,12 @@
 import {
   GameState,
   GamePhase,
-  PlayerStatus,
   vertexKey,
   edgeKey,
 } from '../types/game.js';
 import {
   VertexId,
   EdgeId,
-  VertexDirection,
   vertexAdjacentHexes,
   hexEquals,
 } from '../hex/coordinates.js';
@@ -17,7 +15,6 @@ import {
   TERRAIN_RESOURCE,
 } from '../types/resources.js';
 import { canPlaceSettlement, canPlaceRoad } from './rules.js';
-import { nextPlayerIndex, prevPlayerIndex } from './engine.js';
 
 /** Determine which player should place next in the setup snake draft. */
 export function getSetupPlacementPlayer(state: GameState): string {
@@ -109,36 +106,32 @@ export function distributeInitialResources(
 
 /** Advance setup to the next player or transition to playing phase. Mutates state. */
 export function advanceSetupPhase(state: GameState): void {
-  const activePlayers = state.players.filter((p) => p.status !== PlayerStatus.Quit);
-  const lastActiveIndex = activePlayers.length - 1;
+  const playerCount = state.players.length;
 
   if (state.currentPhase === GamePhase.SetupForward) {
-    // Forward round: advance to next player
-    const nextIdx = nextPlayerIndex(state);
-    if (nextIdx <= state.currentPlayerIndex) {
+    // Forward round: player 0 → 1 → ... → last
+    const nextIdx = (state.currentPlayerIndex + 1) % playerCount;
+    if (nextIdx === 0) {
       // Wrapped around — forward round complete, switch to reverse
+      // Stay on the last player (they go again in reverse)
       state.currentPhase = GamePhase.SetupReverse;
       state.setupRound = 2;
-      // Stay on the last player (they go again in reverse)
     } else {
       state.currentPlayerIndex = nextIdx;
     }
   } else if (state.currentPhase === GamePhase.SetupReverse) {
-    // Reverse round: go backward
-    const prevIdx = prevPlayerIndex(state);
-    if (prevIdx >= state.currentPlayerIndex) {
-      // Wrapped around — setup complete, start playing
+    // Reverse round: last → ... → 1 → 0
+    if (state.currentPlayerIndex === 0) {
+      // First player done — setup complete, start playing
       state.currentPhase = GamePhase.RollDice;
       state.status = 'playing';
-      state.currentPlayerIndex = 0;
       state.turnNumber = 1;
-      // Skip to first non-quit player
-      while (state.players[state.currentPlayerIndex].status === PlayerStatus.Quit) {
-        state.currentPlayerIndex =
-          (state.currentPlayerIndex + 1) % state.players.length;
-      }
+      // currentPlayerIndex stays at 0 (first player starts)
     } else {
-      state.currentPlayerIndex = prevIdx;
+      state.currentPlayerIndex = state.currentPlayerIndex - 1;
     }
   }
+
+  // Next player always starts by placing a settlement
+  state.setupAction = 'settlement';
 }

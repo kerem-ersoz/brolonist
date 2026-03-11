@@ -42,6 +42,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
     dice: [1, 1],
     turnNumber: 1,
     setupRound: 1,
+    setupAction: 'settlement',
     activeTradeOffers: [],
     pendingDiscards: [],
     specialBuildOrder: [],

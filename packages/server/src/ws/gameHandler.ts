@@ -25,6 +25,7 @@ import {
   getPlayersWhoMustDiscard,
   transitionPhase,
   endTurn as engineEndTurn,
+  advanceSpecialBuild,
   addLogEntry,
   // rules
   canPlaceSettlement,
@@ -32,6 +33,8 @@ import {
   canPlaceCity,
   vertexKey,
   edgeKey,
+  getValidSettlementLocations,
+  getValidRoadLocations,
   // setup
   handleSetupSettlement,
   handleSetupRoad,
@@ -49,6 +52,9 @@ import {
   executeSteal,
   validateDiscard,
   executeDiscard,
+  autoDiscardRandom,
+  totalCards,
+  hexEquals,
   // devcard
   canBuyDevCard,
   executeBuyDevCard,
@@ -181,6 +187,7 @@ export function initializeGame(
     dice: [0, 0],
     turnNumber: 0,
     setupRound: 1,
+    setupAction: 'settlement',
     activeTradeOffers: [],
     pendingDiscards: [],
     specialBuildOrder: [],
@@ -209,6 +216,7 @@ export function handleStartGame(
   const state = initializeGame(gameId, playerInits, config);
   addLogEntry(state, { type: 'game_start', message: 'Game started', playerId });
   broadcastState(gameId, state);
+  scheduleBotTurn(gameId);
 }
 
 export function handleRollDice(playerId: string, gameId: string): void {
@@ -240,6 +248,7 @@ export function handleRollDice(playerId: string, gameId: string): void {
   }
 
   broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
 }
 
 export function handlePlaceSettlement(
@@ -255,9 +264,11 @@ export function handlePlaceSettlement(
     state.currentPhase === GamePhase.SetupReverse;
 
   if (isSetup) {
+    if (state.setupAction !== 'settlement') return sendError(playerId, 'You need to place a road first');
     const error = handleSetupSettlement(state, playerId, payload.vertex);
     if (error) return sendError(playerId, error);
     distributeInitialResources(state, playerId, payload.vertex);
+    state.setupAction = 'road';
     addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup)', playerId });
   } else {
     if (state.currentPhase !== GamePhase.TradeAndBuild && state.currentPhase !== GamePhase.SpecialBuild) {
@@ -310,6 +321,7 @@ export function handlePlaceRoad(
     state.currentPhase === GamePhase.SetupReverse;
 
   if (isSetup) {
+    if (state.setupAction !== 'road') return sendError(playerId, 'You need to place a settlement first');
     const error = handleSetupRoad(state, playerId, payload.edge);
     if (error) return sendError(playerId, error);
     addLogEntry(state, { type: 'place_road', message: 'Road placed (setup)', playerId });
@@ -341,6 +353,7 @@ export function handlePlaceRoad(
   }
 
   broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
 }
 
 export function handlePlaceCity(
@@ -490,6 +503,7 @@ export function handleMoveRobber(
 
   transitionPhase(state, GamePhase.TradeAndBuild);
   broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
 }
 
 export function handleDiscardCards(
@@ -518,6 +532,7 @@ export function handleDiscardCards(
   }
 
   broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
 }
 
 export function handleTradeOffer(
@@ -567,6 +582,15 @@ export function handleTradeRespond(
   offer.responses[playerId] = payload.response;
 
   if (payload.response === 'accept') {
+    // Re-validate both players have resources before executing
+    const fromPlayer = state.players.find((p) => p.id === offer.fromPlayerId);
+    const toPlayer = state.players.find((p) => p.id === playerId);
+    if (!fromPlayer || !toPlayer) return sendError(playerId, 'Player not found');
+    if (!hasResources(fromPlayer.resources, offer.offering))
+      return sendError(playerId, 'Offering player no longer has sufficient resources');
+    if (!hasResources(toPlayer.resources, offer.requesting))
+      return sendError(playerId, 'You do not have sufficient resources to accept');
+
     const tradeError = executeTrade(state, offer.fromPlayerId, playerId, offer.offering, offer.requesting);
     if (tradeError) return sendError(playerId, tradeError);
     offer.status = 'completed';
@@ -612,4 +636,279 @@ export function handleEndTurn(playerId: string, gameId: string): void {
   addLogEntry(state, { type: 'end_turn', message: 'Turn ended', playerId });
 
   broadcastState(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+export function handlePassSpecialBuild(playerId: string, gameId: string): void {
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+  if (state.currentPhase !== GamePhase.SpecialBuild) return sendError(playerId, 'Not in special build phase');
+
+  const expectedPlayerId = state.specialBuildOrder[state.specialBuildCurrentIndex];
+  if (expectedPlayerId !== playerId) return sendError(playerId, 'Not your turn to special build');
+
+  advanceSpecialBuild(state);
+  addLogEntry(state, { type: 'pass_special_build', message: 'Passed special build', playerId });
+
+  broadcastState(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+// ---------------------------------------------------------------------------
+// Bot auto-play
+// ---------------------------------------------------------------------------
+
+const botTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+export function scheduleBotTurn(gameId: string): void {
+  // Clear any existing timer
+  const existing = botTimers.get(gameId);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(() => {
+    botTimers.delete(gameId);
+    processBotTurn(gameId);
+  }, 1000);
+  botTimers.set(gameId, timer);
+}
+
+export function processBotTurn(gameId: string): void {
+  const state = games.get(gameId);
+  if (!state) return;
+  if (state.currentPhase === GamePhase.GameOver) return;
+
+  // In discard phase, auto-discard for all bot players that still need to discard
+  if (state.currentPhase === GamePhase.Discard) {
+    const botDiscards = state.pendingDiscards.filter((pid) => {
+      const p = state.players.find((pl) => pl.id === pid);
+      return p?.isBot;
+    });
+    if (botDiscards.length > 0) {
+      for (const botId of botDiscards) {
+        const bot = state.players.find((p) => p.id === botId);
+        if (!bot) continue;
+        const discardCount = Math.floor(totalCards(bot.resources) / 2);
+        autoDiscardRandom(bot, discardCount);
+        state.pendingDiscards = state.pendingDiscards.filter((id) => id !== botId);
+        addLogEntry(state, { type: 'discard', message: 'Discarded cards (bot)', playerId: botId });
+      }
+      if (state.pendingDiscards.length === 0) {
+        transitionPhase(state, GamePhase.MoveRobber);
+      }
+      broadcastAndCheckVictory(gameId, state);
+      // Schedule another bot turn in case the current player (robber mover) is a bot
+      scheduleBotTurn(gameId);
+      return;
+    }
+    // Remaining discards are human players — wait
+    return;
+  }
+
+  // In special build phase, check if the current special-build player is a bot
+  if (state.currentPhase === GamePhase.SpecialBuild) {
+    const sbPlayerId = state.specialBuildOrder[state.specialBuildCurrentIndex];
+    if (!sbPlayerId) return;
+    const sbPlayer = state.players.find((p) => p.id === sbPlayerId);
+    if (!sbPlayer?.isBot) return;
+
+    // Bot just passes special build
+    advanceSpecialBuild(state);
+    addLogEntry(state, { type: 'pass_special_build', message: 'Passed special build (bot)', playerId: sbPlayerId });
+    broadcastState(gameId, state);
+    scheduleBotTurn(gameId);
+    return;
+  }
+
+  const current = getCurrentPlayer(state);
+  if (!current.isBot) return;
+
+  switch (state.currentPhase) {
+    case GamePhase.SetupForward:
+    case GamePhase.SetupReverse:
+      botSetupTurn(gameId, state, current);
+      break;
+    case GamePhase.RollDice:
+      botRollDice(gameId, state, current);
+      break;
+    case GamePhase.MoveRobber:
+      botMoveRobber(gameId, state, current);
+      break;
+    case GamePhase.TradeAndBuild:
+      botTradeAndBuild(gameId, state, current);
+      break;
+    default:
+      break;
+  }
+}
+
+function botSetupTurn(gameId: string, state: GameState, bot: Player): void {
+  // Place a settlement at a random valid location
+  const validSettlements = getValidSettlementLocations(state, bot.id, true);
+  if (validSettlements.length === 0) return;
+
+  const settlement = validSettlements[Math.floor(Math.random() * validSettlements.length)];
+  const sError = handleSetupSettlement(state, bot.id, settlement);
+  if (sError) return;
+
+  if (state.currentPhase === GamePhase.SetupReverse) {
+    distributeInitialResources(state, bot.id, settlement);
+  }
+  state.setupAction = 'road';
+  addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup, bot)', playerId: bot.id });
+
+  // Place a road at a random valid location
+  const validRoads = getValidRoadLocations(state, bot.id, true);
+  if (validRoads.length === 0) return;
+
+  const road = validRoads[Math.floor(Math.random() * validRoads.length)];
+  const rError = handleSetupRoad(state, bot.id, road);
+  if (rError) return;
+
+  addLogEntry(state, { type: 'place_road', message: 'Road placed (setup, bot)', playerId: bot.id });
+  advanceSetupPhase(state);
+
+  for (const p of state.players) {
+    p.victoryPoints = calculateVictoryPoints(state, p.id);
+  }
+
+  broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+function botRollDice(gameId: string, state: GameState, bot: Player): void {
+  const dice = rollDice();
+  state.dice = dice;
+  const diceSum = dice[0] + dice[1];
+
+  addLogEntry(state, { type: 'roll_dice', message: `Rolled ${diceSum} (bot)`, playerId: bot.id, data: { dice } });
+
+  if (diceSum === 7) {
+    const mustDiscard = getPlayersWhoMustDiscard(state);
+    if (mustDiscard.length > 0) {
+      state.pendingDiscards = mustDiscard;
+      transitionPhase(state, GamePhase.Discard);
+    } else {
+      transitionPhase(state, GamePhase.MoveRobber);
+    }
+  } else {
+    const distribution = distributeResources(state, diceSum);
+    addLogEntry(state, { type: 'distribute', message: 'Resources distributed', data: { distribution } });
+    transitionPhase(state, GamePhase.TradeAndBuild);
+  }
+
+  broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+function botMoveRobber(gameId: string, state: GameState, bot: Player): void {
+  // Pick a random hex that isn't the current robber position
+  const validHexes = state.board.hexes.filter(
+    (h) => !hexEquals(h.coord, state.robberPosition),
+  );
+  if (validHexes.length === 0) return;
+
+  const targetHex = validHexes[Math.floor(Math.random() * validHexes.length)].coord;
+  executeRobberMove(state, targetHex);
+  addLogEntry(state, { type: 'move_robber', message: 'Robber moved (bot)', playerId: bot.id });
+
+  // Steal from a random adjacent player
+  const targets = getStealTargets(state, targetHex);
+  if (targets.length > 0) {
+    const victimId = targets[Math.floor(Math.random() * targets.length)];
+    const stolenResource = executeSteal(state, victimId, bot.id);
+    if (stolenResource) {
+      addLogEntry(state, {
+        type: 'steal',
+        message: `Stole a resource (bot)`,
+        playerId: bot.id,
+        data: { victimId },
+      });
+    }
+  }
+
+  transitionPhase(state, GamePhase.TradeAndBuild);
+  broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+function botTradeAndBuild(gameId: string, state: GameState, bot: Player): void {
+  let built = false;
+
+  // Greedy: city > settlement > road > dev card
+  // Try to upgrade a settlement to a city
+  if (hasResources(bot.resources, BUILDING_COSTS[BuildingType.City])) {
+    for (const [key, building] of state.board.vertexBuildings) {
+      if (building.playerId === bot.id && building.type === BuildingType.Settlement) {
+        const parts = key.split(',');
+        if (parts.length !== 3) continue;
+        const vertex: VertexId = {
+          hex: { q: parseInt(parts[0], 10), r: parseInt(parts[1], 10) },
+          direction: parts[2] as VertexId['direction'],
+        };
+        const err = canPlaceCity(state, bot.id, vertex);
+        if (!err) {
+          bot.resources = subtractResources(bot.resources, BUILDING_COSTS[BuildingType.City]);
+          state.board.vertexBuildings.set(key, { type: BuildingType.City, playerId: bot.id });
+          bot.citiesBuilt += 1;
+          bot.settlementsBuilt -= 1;
+          addLogEntry(state, { type: 'place_city', message: 'City placed (bot)', playerId: bot.id });
+          built = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // Try to build a settlement
+  if (!built && hasResources(bot.resources, BUILDING_COSTS[BuildingType.Settlement])) {
+    const validSettlements = getValidSettlementLocations(state, bot.id, false);
+    if (validSettlements.length > 0) {
+      const vertex = validSettlements[Math.floor(Math.random() * validSettlements.length)];
+      bot.resources = subtractResources(bot.resources, BUILDING_COSTS[BuildingType.Settlement]);
+      state.board.vertexBuildings.set(vertexKey(vertex), { type: BuildingType.Settlement, playerId: bot.id });
+      bot.settlementsBuilt += 1;
+      // Check harbors
+      for (const harbor of state.board.harbors) {
+        const hVerts = harbor.vertices.map((v) => vertexKey(v));
+        if (hVerts.includes(vertexKey(vertex)) && !bot.harbors.includes(harbor.type)) {
+          bot.harbors.push(harbor.type);
+        }
+      }
+      updateLongestRoadHolder(state);
+      addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (bot)', playerId: bot.id });
+      built = true;
+    }
+  }
+
+  // Try to build a road
+  if (!built && hasResources(bot.resources, BUILDING_COSTS[BuildingType.Road])) {
+    const validRoads = getValidRoadLocations(state, bot.id, false);
+    if (validRoads.length > 0) {
+      const edge = validRoads[Math.floor(Math.random() * validRoads.length)];
+      bot.resources = subtractResources(bot.resources, BUILDING_COSTS[BuildingType.Road]);
+      state.board.edgeBuildings.set(edgeKey(edge), { type: BuildingType.Road, playerId: bot.id });
+      bot.roadsBuilt += 1;
+      updateLongestRoadHolder(state);
+      addLogEntry(state, { type: 'place_road', message: 'Road placed (bot)', playerId: bot.id });
+      built = true;
+    }
+  }
+
+  // Try to buy a dev card
+  if (!built && canBuyDevCard(state, bot.id) === null) {
+    executeBuyDevCard(state, bot.id);
+    addLogEntry(state, { type: 'buy_dev_card', message: 'Bought a development card (bot)', playerId: bot.id });
+    built = true;
+  }
+
+  // End turn
+  for (const p of state.players) {
+    p.victoryPoints = calculateVictoryPoints(state, p.id);
+  }
+
+  engineEndTurn(state);
+  addLogEntry(state, { type: 'end_turn', message: 'Turn ended (bot)', playerId: bot.id });
+
+  broadcastState(gameId, state);
+  scheduleBotTurn(gameId);
 }

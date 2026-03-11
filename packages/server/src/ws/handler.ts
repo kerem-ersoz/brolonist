@@ -148,7 +148,12 @@ function handleJoinGame(playerId: string, playerName: string, payload: { gameId:
   }
 
   // Game is in lobby — add player and broadcast lobby state
-  addPlayerToLobby(payload.gameId, playerId, playerName);
+  const lobby = addPlayerToLobby(payload.gameId, playerId, playerName);
+  if (!lobby) {
+    // Lobby doesn't exist (server may have restarted)
+    hub.send(playerId, 'error', { code: 'GAME_NOT_FOUND', message: 'Game not found. It may have expired.' });
+    return;
+  }
   hub.broadcast(payload.gameId, 'player_joined', { playerId }, playerId);
   broadcastLobbyState(payload.gameId);
 }

@@ -56,6 +56,10 @@ export function useWebSocket(gameId: string | null) {
             break;
           case 'error':
             setError(msg.payload.message);
+            // If game not found, redirect to lobby
+            if (msg.payload.code === 'GAME_NOT_FOUND') {
+              window.location.href = '/';
+            }
             break;
           case 'game_ended':
             useGameStore.getState().setGameResult(msg.payload);

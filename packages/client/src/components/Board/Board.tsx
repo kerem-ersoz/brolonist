@@ -62,12 +62,17 @@ export function Board({
 
   const getVertexBuilding = (q: number, r: number, dir: VertexDirection) => {
     const key = `${q},${r},${dir}`;
-    return getBuildingWithColor(board.vertexBuildings?.get(key));
+    // vertexBuildings may be a Map (local) or plain object (from server JSON)
+    const map = board.vertexBuildings;
+    const b = map instanceof Map ? map.get(key) : (map as Record<string, Building>)?.[key];
+    return getBuildingWithColor(b);
   };
 
   const getEdgeBuilding = (q: number, r: number, dir: EdgeDirection) => {
     const key = `${q},${r},${dir}`;
-    return getBuildingWithColor(board.edgeBuildings?.get(key));
+    const map = board.edgeBuildings;
+    const b = map instanceof Map ? map.get(key) : (map as Record<string, Building>)?.[key];
+    return getBuildingWithColor(b);
   };
 
   const isValidSettlement = (q: number, r: number, dir: VertexDirection) =>

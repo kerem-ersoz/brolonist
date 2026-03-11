@@ -42,7 +42,6 @@ export function useWebSocket(gameId: string | null) {
             useLobbyStore.getState().setCurrentLobby(msg.payload);
             break;
           case 'game_state':
-            // Clear lobby when the game actually starts
             useLobbyStore.getState().setCurrentLobby(null);
             setGameState(msg.payload);
             break;
@@ -56,7 +55,6 @@ export function useWebSocket(gameId: string | null) {
             break;
           case 'error':
             setError(msg.payload.message);
-            // If game not found, redirect to lobby
             if (msg.payload.code === 'GAME_NOT_FOUND') {
               window.location.href = '/';
             }
@@ -64,12 +62,45 @@ export function useWebSocket(gameId: string | null) {
           case 'game_ended':
             useGameStore.getState().setGameResult(msg.payload);
             break;
-          default:
-            // Log events like chat, dice_rolled, player_joined, etc.
-            if (msg.payload) {
-              addLogEntry({ type: msg.type, message: JSON.stringify(msg.payload), timestamp: new Date().toISOString() });
+          case 'trade_proposed': {
+            // Add the offer to activeTradeOffers in game state
+            const gs = useGameStore.getState().gameState;
+            if (gs) {
+              const offers = [...(gs.activeTradeOffers || []), msg.payload.offer];
+              useGameStore.getState().applyDelta({ activeTradeOffers: offers } as never);
+            }
+            const o = msg.payload.offer;
+            const res = (r: Record<string, number>) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
+            addLogEntry({ type: 'trade_proposed', message: `offers ${res(o.offering)} for ${res(o.requesting)}`, playerId: o.fromPlayerId, timestamp: new Date().toISOString() });
+            break;
+          }
+          case 'trade_completed': {
+            // Remove completed offer from active offers
+            const gs2 = useGameStore.getState().gameState;
+            if (gs2) {
+              const remaining = (gs2.activeTradeOffers || []).filter((o: unknown) => (o as { id: string }).id !== msg.payload.offerId);
+              useGameStore.getState().applyDelta({ activeTradeOffers: remaining } as never);
+            }
+            addLogEntry({ type: 'trade_completed', message: `Trade completed!`, timestamp: new Date().toISOString() });
+            break;
+          }
+          default: {
+            // Format known event types as human-readable log entries
+            const p = msg.payload || {};
+            let logMsg = '';
+            switch (msg.type) {
+              case 'dice_rolled': logMsg = `rolled ${p.values?.[0]}+${p.values?.[1]} = ${(p.values?.[0] || 0) + (p.values?.[1] || 0)}`; break;
+              case 'player_joined': logMsg = 'joined the game'; break;
+              case 'player_left': logMsg = 'left the game'; break;
+              case 'player_ready': logMsg = p.ready ? 'is ready' : 'is not ready'; break;
+              case 'chat': logMsg = p.message; break;
+              default: logMsg = msg.type.replace(/_/g, ' ');
+            }
+            if (logMsg) {
+              addLogEntry({ type: msg.type, message: logMsg, playerId: p.playerId, timestamp: new Date().toISOString() });
             }
             break;
+          }
         }
       } catch { /* ignore parse errors */ }
     };

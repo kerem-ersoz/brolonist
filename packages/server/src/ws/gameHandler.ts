@@ -564,9 +564,37 @@ export function handleTradeOffer(
   };
 
   state.activeTradeOffers.push(offer);
-  addLogEntry(state, { type: 'trade_offer', message: 'Trade proposed', playerId });
+
+  // Human-readable log entry
+  const fmtRes = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
+  addLogEntry(state, { type: 'trade_offer', message: `offers ${fmtRes(offer.offering)} for ${fmtRes(offer.requesting)}`, playerId });
 
   hub.broadcast(gameId, 'trade_proposed', { offer });
+
+  // Bot auto-responses (after a delay)
+  setTimeout(() => {
+    const s = games.get(gameId);
+    if (!s) return;
+    const o = s.activeTradeOffers.find(t => t.id === offer.id);
+    if (!o || o.status !== 'open') return;
+
+    for (const bot of s.players.filter(p => p.isBot && p.id !== playerId && p.status !== 'quit' as never)) {
+      // Simple bot trade logic: accept if bot has the requested resources and it's a fair-ish trade
+      if (hasResources(bot.resources, offer.requesting)) {
+        // Greedy: accept if giving fewer or equal total cards than receiving
+        const giveTotal = Object.values(offer.requesting).reduce((a, b) => a + b, 0);
+        const getTotal = Object.values(offer.offering).reduce((a, b) => a + b, 0);
+        if (getTotal >= giveTotal) {
+          handleTradeRespond(bot.id, gameId, { offerId: offer.id, response: 'accept' });
+          return; // First bot to accept wins
+        }
+      }
+      // Otherwise decline
+      o.responses[bot.id] = 'decline';
+      addLogEntry(s, { type: 'trade_decline', message: 'declined the trade', playerId: bot.id });
+    }
+    broadcastState(gameId, s);
+  }, 1500);
 }
 
 export function handleTradeRespond(
@@ -596,7 +624,10 @@ export function handleTradeRespond(
     const tradeError = executeTrade(state, offer.fromPlayerId, playerId, offer.offering, offer.requesting);
     if (tradeError) return sendError(playerId, tradeError);
     offer.status = 'completed';
-    addLogEntry(state, { type: 'trade_completed', message: 'Trade completed', playerId });
+    const fromName = state.players.find(p => p.id === offer.fromPlayerId)?.name || 'Unknown';
+    const toName = state.players.find(p => p.id === playerId)?.name || 'Unknown';
+    const fmtR = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
+    addLogEntry(state, { type: 'trade_completed', message: `${fromName} traded ${fmtR(offer.offering)} with ${toName} for ${fmtR(offer.requesting)}` });
     hub.broadcast(gameId, 'trade_completed', { offerId: offer.id, acceptedBy: playerId });
   } else if (payload.response === 'counter' && payload.counter) {
     offer.counterOffers[playerId] = payload.counter;

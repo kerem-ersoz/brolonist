@@ -27,6 +27,7 @@ COPY --from=builder /app/packages/server/package.json ./packages/server/
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/server/dist ./packages/server/dist
 COPY --from=builder /app/packages/server/prisma ./packages/server/prisma
+COPY --from=builder /app/packages/server/data ./packages/server/data
 COPY --from=builder /app/packages/client/dist ./packages/client/dist
 
 RUN npm ci --omit=dev --workspace=packages/server --workspace=packages/shared

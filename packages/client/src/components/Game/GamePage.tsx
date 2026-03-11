@@ -7,11 +7,12 @@ import { useLobbyStore } from '../../store/lobbyStore';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useAuth } from '../../hooks/useAuth';
 import { Board } from '../Board/Board';
-import { PlayerPanel } from '../Player/PlayerPanel';
+import { PlayerHand } from '../Player/PlayerHand';
 import { OpponentBar } from '../Player/OpponentBar';
 import { ActionBar } from '../Actions/ActionBar';
 import { DiceDisplay } from '../Actions/DiceDisplay';
-import { TradePanel } from '../Trade/TradePanel';
+import { TradeModal } from '../Trade/TradeModal';
+import { TradeOfferCard } from '../Trade/TradeOfferCard';
 import { GameLog } from '../Chat/GameLog';
 import { GameLayout } from '../Layout/GameLayout';
 import { Navbar } from '../Layout/Navbar';
@@ -43,7 +44,10 @@ export function GamePage() {
 
   const gameResult = useGameStore((s) => s.gameResult);
 
-  const [showTrade, setShowTrade] = useState(false);
+  const [tradeModalOpen, setTradeModalOpen] = useState(false);
+  const [tradePreselect, setTradePreselect] = useState<string | null>(null);
+  const [counterPrefillGive, setCounterPrefillGive] = useState<Record<string, number> | null>(null);
+  const [counterPrefillGet, setCounterPrefillGet] = useState<Record<string, number> | null>(null);
   const [buildMode, setBuildMode] = useState<'road' | 'settlement' | 'city' | null>(null);
 
   const phase = gameState?.currentPhase || '';
@@ -96,6 +100,20 @@ export function GamePage() {
   const canTrade = myTurn && phase === 'trade_and_build';
   const canEndTurn = myTurn && phase === 'trade_and_build';
   const canBuyDevCard = canBuild;
+
+  const openTradeModal = useCallback((resource?: string) => {
+    setTradePreselect(resource ?? null);
+    setCounterPrefillGive(null);
+    setCounterPrefillGet(null);
+    setTradeModalOpen(true);
+  }, []);
+
+  const closeTradeModal = useCallback(() => {
+    setTradeModalOpen(false);
+    setTradePreselect(null);
+    setCounterPrefillGive(null);
+    setCounterPrefillGet(null);
+  }, []);
 
   const handleRollDice = useCallback(() => sendMessage('roll_dice'), [sendMessage]);
   const handleEndTurn = useCallback(() => {
@@ -208,6 +226,27 @@ export function GamePage() {
     phaseHint = `⏳ Waiting for ${currentPlayer?.name || 'opponent'}...`;
   }
 
+  // Incoming trade offers for this player (from other players)
+  const incomingOffers = useMemo(() => {
+    return (gameState.activeTradeOffers as Array<{ id: string; fromPlayerId: string; offering: Record<string, number>; requesting: Record<string, number> }>)
+      .filter(o => o.fromPlayerId !== myPlayerId)
+      .map(o => ({
+        id: o.id,
+        fromPlayerName: playerNames[o.fromPlayerId]?.name ?? 'Unknown',
+        fromPlayerColor: playerNames[o.fromPlayerId]?.color ?? 'gray',
+        offering: o.offering,
+        requesting: o.requesting,
+      }));
+  }, [gameState.activeTradeOffers, myPlayerId, playerNames]);
+
+  const handleCounterOffer = useCallback((offer: { offering: Record<string, number>; requesting: Record<string, number> }) => {
+    // Counter: swap give/get and open modal
+    setCounterPrefillGive(offer.requesting);
+    setCounterPrefillGet(offer.offering);
+    setTradePreselect(null);
+    setTradeModalOpen(true);
+  }, []);
+
   return (
     <div className="h-screen flex flex-col bg-gray-900">
       <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
@@ -236,15 +275,16 @@ export function GamePage() {
         opponents={
           <OpponentBar opponents={opponents} currentPlayerId={currentPlayer?.id || null} />
         }
-        playerPanel={
+        playerHand={
           me ? (
-            <PlayerPanel
+            <PlayerHand
               resources={me.resources as unknown as Record<string, number>}
               developmentCards={me.developmentCards as Array<{ type: string }>}
               roadsBuilt={me.roadsBuilt}
               settlementsBuilt={me.settlementsBuilt}
               citiesBuilt={me.citiesBuilt}
               victoryPoints={me.victoryPoints}
+              onCardClick={(resource) => openTradeModal(resource)}
             />
           ) : null
         }
@@ -260,33 +300,41 @@ export function GamePage() {
             onRollDice={handleRollDice}
             onBuild={handleBuild}
             onBuyDevCard={handleBuyDevCard}
-            onTrade={() => setShowTrade(true)}
+            onTrade={() => openTradeModal()}
             onEndTurn={handleEndTurn}
           />
         }
         dice={gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null}
-        sidePanel={
-          showTrade && me ? (
-            <TradePanel
-              myResources={me.resources as unknown as Record<string, number>}
-              activeOffers={(gameState.activeTradeOffers as Array<{ id: string; fromPlayerId: string; offering: Record<string, number>; requesting: Record<string, number> }>).map(o => ({
-                id: o.id,
-                fromPlayerName: playerNames[o.fromPlayerId]?.name ?? 'Unknown',
-                offering: o.offering,
-                requesting: o.requesting,
-              }))}
-              harbors={me.harbors ?? []}
-              onPropose={(offering, requesting) => sendMessage('trade_offer', { offering, requesting })}
-              onAccept={(offerId) => sendMessage('trade_respond', { offerId, response: 'accept' })}
-              onDecline={(offerId) => sendMessage('trade_respond', { offerId, response: 'decline' })}
-              onBankTrade={(giving, givingCount, receiving) => sendMessage('trade_with_bank', { giving, givingCount, receiving })}
-              onClose={() => setShowTrade(false)}
-            />
-          ) : (
-            <GameLog entries={gameState.log} playerNames={playerNames} />
-          )
+        gameLog={<GameLog entries={gameState.log} playerNames={playerNames} />}
+        tradeOffers={
+          <TradeOfferCard
+            offers={incomingOffers}
+            onAccept={(offerId) => sendMessage('trade_respond', { offerId, response: 'accept' })}
+            onDecline={(offerId) => sendMessage('trade_respond', { offerId, response: 'decline' })}
+            onCounter={handleCounterOffer}
+          />
         }
       />
+
+      {/* Trade Modal */}
+      {tradeModalOpen && me && (
+        <TradeModal
+          myResources={me.resources as unknown as Record<string, number>}
+          harbors={me.harbors ?? []}
+          preselectedResource={tradePreselect}
+          prefillGive={counterPrefillGive}
+          prefillGet={counterPrefillGet}
+          onPropose={(offering, requesting) => {
+            sendMessage('trade_offer', { offering, requesting });
+            closeTradeModal();
+          }}
+          onBankTrade={(giving, givingCount, receiving) => {
+            sendMessage('trade_with_bank', { giving, givingCount, receiving });
+            closeTradeModal();
+          }}
+          onClose={closeTradeModal}
+        />
+      )}
     </div>
   );
 }

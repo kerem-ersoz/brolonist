@@ -5,7 +5,7 @@
   "game": { "yourTurn": "Your turn!", "rollDice": "Roll Dice", "endTurn": "End Turn", "build": "Build", "trade": "Trade", "buyDevCard": "Buy Dev Card", "playDevCard": "Play Dev Card", "cancel": "Cancel" },
   "buildings": { "road": "Road", "settlement": "Settlement", "city": "City" },
   "resources": { "brick": "Brick", "lumber": "Lumber", "ore": "Ore", "grain": "Grain", "wool": "Wool" },
-  "trade": { "offer": "Offer", "give": "Give", "want": "Want", "propose": "Propose Trade", "accept": "Accept", "decline": "Decline", "counter": "Counter", "bankTrade": "Bank Trade", "noOffers": "No active offers" },
+  "trade": { "offer": "Offer", "give": "Give", "want": "Want", "propose": "Propose Trade", "accept": "Accept", "decline": "Decline", "counter": "Counter", "bankTrade": "Bank Trade", "noOffers": "No active offers", "offers": "offers", "noResources": "No resources" },
   "devCards": { "knight": "Knight", "victoryPoint": "Victory Point", "roadBuilding": "Road Building", "yearOfPlenty": "Year of Plenty", "monopoly": "Monopoly" },
   "map": { "standard": "Standard", "random": "Random", "pangaea": "Pangaea", "archipelago": "Archipelago", "richCoast": "Rich Coast", "desertRing": "Desert Ring" },
   "status": { "connected": "Connected", "reconnecting": "Reconnecting...", "disconnected": "Disconnected" },

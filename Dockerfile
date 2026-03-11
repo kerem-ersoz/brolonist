@@ -13,6 +13,7 @@ COPY . .
 
 # Build shared first, then server and client
 RUN npm run build -w packages/shared
+RUN npx -w packages/server prisma generate
 RUN npm run build -w packages/server
 RUN npm run build -w packages/client
 

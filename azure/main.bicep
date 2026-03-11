@@ -4,6 +4,9 @@
 @description('Location for all resources')
 param location string = resourceGroup().location
 
+@description('Location for PostgreSQL (some subscriptions restrict certain regions)')
+param postgresLocation string = 'northeurope'
+
 @description('Base name for all resources')
 param appName string = 'brolonist'
 
@@ -62,8 +65,8 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' = {
 // ============================================================================
 
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
-  name: '${appName}-pg'
-  location: location
+  name: '${appName}-postgres'
+  location: postgresLocation
   sku: {
     name: 'Standard_B1ms'
     tier: 'Burstable'

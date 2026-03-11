@@ -1,7 +1,6 @@
 import type { WebSocket } from 'ws';
 import { hub } from './hub.js';
 import {
-  handleStartGame,
   handleRollDice,
   handlePlaceSettlement,
   handlePlaceRoad,
@@ -15,8 +14,20 @@ import {
   handleTradeWithBank,
   handleEndTurn,
   getGame,
+  initializeGame,
+  type PlayerInit,
 } from './gameHandler.js';
 import { filterStateForPlayer } from './sync.js';
+import {
+  getLobbyGame,
+  addPlayerToLobby,
+  removePlayerFromLobby,
+  setPlayerReady,
+  addBotToLobby,
+  removeBotFromLobby,
+  canStartGame,
+} from '../lobby/lobbyStore.js';
+import type { GameConfig } from '@brolonist/shared';
 
 interface WsMessage {
   type: string;
@@ -30,7 +41,7 @@ export function handleConnection(ws: WebSocket, playerId: string, playerName: st
   ws.on('message', (data) => {
     try {
       const msg: WsMessage = JSON.parse(data.toString());
-      handleMessage(playerId, msg);
+      handleMessage(playerId, playerName, msg);
     } catch {
       hub.send(playerId, 'error', { code: 'PARSE_ERROR', message: 'Invalid message format' });
     }
@@ -41,10 +52,10 @@ export function handleConnection(ws: WebSocket, playerId: string, playerName: st
   });
 }
 
-function handleMessage(playerId: string, msg: WsMessage): void {
+function handleMessage(playerId: string, playerName: string, msg: WsMessage): void {
   switch (msg.type) {
     case 'join_game':
-      handleJoinGame(playerId, msg.payload as { gameId: string });
+      handleJoinGame(playerId, playerName, msg.payload as { gameId: string });
       break;
     case 'leave_game':
       handleLeaveGame(playerId);
@@ -52,13 +63,22 @@ function handleMessage(playerId: string, msg: WsMessage): void {
     case 'ready':
       handleReady(playerId, msg.payload as { ready: boolean });
       break;
+    case 'add_bot':
+      handleAddBot(playerId, msg.payload as { strategy?: string });
+      break;
+    case 'remove_bot':
+      handleRemoveBot(playerId, msg.payload as { botId: string });
+      break;
+    case 'kick_player':
+      handleKickPlayer(playerId, msg.payload as { targetId: string });
+      break;
     case 'chat':
       handleChat(playerId, msg.payload as { message: string });
       break;
-    // Game actions — delegated to gameHandler
     case 'start_game':
-      handleStartGame(playerId, msg.payload as Parameters<typeof handleStartGame>[1]);
+      handleStartGameFromLobby(playerId);
       break;
+    // Game actions — delegated to gameHandler
     case 'roll_dice':
       handleRollDice(playerId, getGameId(playerId));
       break;
@@ -100,9 +120,17 @@ function handleMessage(playerId: string, msg: WsMessage): void {
   }
 }
 
-function handleJoinGame(playerId: string, payload: { gameId: string }): void {
+function broadcastLobbyState(gameId: string): void {
+  const lobby = getLobbyGame(gameId);
+  if (!lobby) return;
+  const members = hub.getRoomMembers(gameId);
+  for (const pid of members) {
+    hub.send(pid, 'lobby_state', lobby);
+  }
+}
+
+function handleJoinGame(playerId: string, playerName: string, payload: { gameId: string }): void {
   hub.joinRoom(playerId, payload.gameId);
-  hub.broadcast(payload.gameId, 'player_joined', { playerId }, playerId);
 
   // Tell the client their player ID
   hub.send(playerId, 'player_id', { playerId });
@@ -111,25 +139,122 @@ function handleJoinGame(playerId: string, payload: { gameId: string }): void {
   const state = getGame(payload.gameId);
   if (state) {
     hub.send(playerId, 'game_state', filterStateForPlayer(state, playerId));
-  } else {
-    // Game exists in lobby but not yet started — send lobby confirmation
-    hub.send(playerId, 'action_result', { success: true, type: 'join_game', gameId: payload.gameId });
+    return;
   }
+
+  // Game is in lobby — add player and broadcast lobby state
+  addPlayerToLobby(payload.gameId, playerId, playerName);
+  hub.broadcast(payload.gameId, 'player_joined', { playerId }, playerId);
+  broadcastLobbyState(payload.gameId);
 }
 
 function handleLeaveGame(playerId: string): void {
   const client = hub.getClient(playerId);
   if (client?.gameId) {
     const gameId = client.gameId;
+    removePlayerFromLobby(gameId, playerId);
     hub.leaveRoom(playerId, gameId);
     hub.broadcast(gameId, 'player_left', { playerId });
+    broadcastLobbyState(gameId);
   }
 }
 
 function handleReady(playerId: string, payload: { ready: boolean }): void {
   const client = hub.getClient(playerId);
   if (client?.gameId) {
-    hub.broadcast(client.gameId, 'player_ready', { playerId, ready: payload.ready });
+    setPlayerReady(client.gameId, playerId, payload.ready);
+    broadcastLobbyState(client.gameId);
+  }
+}
+
+function handleAddBot(playerId: string, payload: { strategy?: string }): void {
+  const client = hub.getClient(playerId);
+  if (!client?.gameId) return;
+  const lobby = getLobbyGame(client.gameId);
+  if (!lobby || lobby.hostId !== playerId) {
+    hub.send(playerId, 'error', { code: 'NOT_HOST', message: 'Only the host can add bots' });
+    return;
+  }
+  const result = addBotToLobby(client.gameId, payload.strategy ?? 'random');
+  if (!result) {
+    hub.send(playerId, 'error', { code: 'LOBBY_FULL', message: 'Lobby is full' });
+    return;
+  }
+  broadcastLobbyState(client.gameId);
+}
+
+function handleRemoveBot(playerId: string, payload: { botId: string }): void {
+  const client = hub.getClient(playerId);
+  if (!client?.gameId) return;
+  const lobby = getLobbyGame(client.gameId);
+  if (!lobby || lobby.hostId !== playerId) {
+    hub.send(playerId, 'error', { code: 'NOT_HOST', message: 'Only the host can remove bots' });
+    return;
+  }
+  removeBotFromLobby(client.gameId, payload.botId);
+  broadcastLobbyState(client.gameId);
+}
+
+function handleKickPlayer(playerId: string, payload: { targetId: string }): void {
+  const client = hub.getClient(playerId);
+  if (!client?.gameId) return;
+  const lobby = getLobbyGame(client.gameId);
+  if (!lobby || lobby.hostId !== playerId) {
+    hub.send(playerId, 'error', { code: 'NOT_HOST', message: 'Only the host can kick players' });
+    return;
+  }
+  if (payload.targetId === playerId) return;
+  removePlayerFromLobby(client.gameId, payload.targetId);
+  hub.send(payload.targetId, 'kicked', { gameId: client.gameId });
+  hub.leaveRoom(payload.targetId, client.gameId);
+  broadcastLobbyState(client.gameId);
+}
+
+function handleStartGameFromLobby(playerId: string): void {
+  const client = hub.getClient(playerId);
+  if (!client?.gameId) return;
+  const gameId = client.gameId;
+
+  const lobby = getLobbyGame(gameId);
+  if (!lobby) {
+    hub.send(playerId, 'error', { code: 'NO_LOBBY', message: 'Lobby not found' });
+    return;
+  }
+  if (lobby.hostId !== playerId) {
+    hub.send(playerId, 'error', { code: 'NOT_HOST', message: 'Only the host can start the game' });
+    return;
+  }
+
+  const check = canStartGame(gameId);
+  if (!check.ok) {
+    hub.send(playerId, 'error', { code: 'CANNOT_START', message: check.reason ?? 'Cannot start game' });
+    return;
+  }
+
+  const playerInits: PlayerInit[] = lobby.players.map((p) => ({
+    id: p.id,
+    name: p.name,
+    isBot: p.isBot,
+    botStrategy: p.botStrategy as PlayerInit['botStrategy'],
+  }));
+
+  const config: GameConfig = {
+    maxPlayers: lobby.config.maxPlayers,
+    victoryPoints: lobby.config.victoryPoints,
+    mapType: lobby.config.mapType as GameConfig['mapType'],
+    turnTimerSeconds: lobby.config.turnTimerSeconds,
+    discardTimerSeconds: 30,
+    isPrivate: lobby.config.isPrivate,
+  };
+
+  lobby.status = 'playing';
+
+  const state = initializeGame(gameId, playerInits, config);
+
+  // Broadcast full game state to each player (filtered)
+  const members = hub.getRoomMembers(gameId);
+  for (const pid of members) {
+    hub.send(pid, 'game_state', filterStateForPlayer(state, pid));
   }
 }
 

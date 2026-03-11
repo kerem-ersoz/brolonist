@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { useLobbyStore } from '../store/lobbyStore';
 import { useAuthStore } from '../store/authStore';
 
 export function useWebSocket(gameId: string | null) {
@@ -37,7 +38,12 @@ export function useWebSocket(gameId: string | null) {
           case 'player_id':
             setMyPlayerId(msg.payload.playerId);
             break;
+          case 'lobby_state':
+            useLobbyStore.getState().setCurrentLobby(msg.payload);
+            break;
           case 'game_state':
+            // Clear lobby when the game actually starts
+            useLobbyStore.getState().setCurrentLobby(null);
             setGameState(msg.payload);
             break;
           case 'state_update':

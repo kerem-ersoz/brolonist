@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Board as BoardType } from '@brolonist/shared';
 import { useGameStore } from '../../store/gameStore';
+import { useLobbyStore } from '../../store/lobbyStore';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useAuth } from '../../hooks/useAuth';
 import { Board } from '../Board/Board';
@@ -14,6 +15,7 @@ import { TradePanel } from '../Trade/TradePanel';
 import { GameLog } from '../Chat/GameLog';
 import { GameLayout } from '../Layout/GameLayout';
 import { Navbar } from '../Layout/Navbar';
+import { GameWaitingRoom } from '../Lobby/GameWaitingRoom';
 
 export function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
@@ -68,30 +70,30 @@ export function GamePage() {
     }
   }, [phase, sendMessage]);
 
+  const currentLobby = useLobbyStore((s) => s.currentLobby);
+
   if (!gameState) {
+    if (connectionStatus === 'connected' && currentLobby) {
+      return (
+        <GameWaitingRoom
+          lobby={currentLobby}
+          myPlayerId={myPlayerId}
+          onReady={(ready) => sendMessage('ready', { ready })}
+          onAddBot={(strategy) => sendMessage('add_bot', { strategy })}
+          onRemoveBot={(botId) => sendMessage('remove_bot', { botId })}
+          onKick={(targetId) => sendMessage('kick_player', { targetId })}
+          onStartGame={() => sendMessage('start_game', {})}
+        />
+      );
+    }
+
     return (
       <div className="h-screen bg-gray-900 flex flex-col">
         <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
         <div className="flex-1 flex items-center justify-center text-white">
           <div className="text-center space-y-4">
-            {connectionStatus === 'connected' ? (
-              <>
-                <div className="text-6xl">🎲</div>
-                <h2 className="text-2xl font-bold">{t('lobby.title')}</h2>
-                <p className="text-gray-400">{t('lobby.waitingForPlayers')}</p>
-                <button
-                  onClick={() => sendMessage('start_game', {})}
-                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-lg"
-                >
-                  {t('lobby.startGame')}
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="animate-spin text-4xl">⏳</div>
-                <p>{t('status.reconnecting')}</p>
-              </>
-            )}
+            <div className="animate-spin text-4xl">⏳</div>
+            <p>{connectionStatus === 'connected' ? t('lobby.waitingForPlayers') : t('status.reconnecting')}</p>
           </div>
         </div>
       </div>

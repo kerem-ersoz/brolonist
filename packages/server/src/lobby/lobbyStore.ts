@@ -48,7 +48,7 @@ export function createLobbyGame(
     name: opts.name || `${hostName}'s Game`,
     hostId,
     hostName,
-    players: [{ id: hostId, name: hostName, ready: false, isBot: false }],
+    players: [{ id: hostId, name: hostName, ready: true, isBot: false }],
     config: {
       maxPlayers,
       victoryPoints: opts.victoryPoints ?? defaultVP,

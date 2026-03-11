@@ -18,6 +18,7 @@ interface VertexProps {
 export function Vertex({ hex, direction, size, building, validPlacement, ghost, onClick }: VertexProps) {
   const pos = vertexToPixel({ hex, direction }, size);
   const r = size * 0.18;
+  const hitR = size * 0.35;
 
   if (building) {
     const color = PLAYER_COLORS[building.color] || '#999';
@@ -56,26 +57,30 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
   if (ghost?.type === 'settlement') {
     const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
     return (
-      <circle
-        cx={pos.x} cy={pos.y} r={r}
-        fill={ghostColor} fillOpacity={0.5}
-        stroke={ghostColor} strokeWidth={2}
-        strokeDasharray="4 2"
-        className="cursor-pointer animate-pulse"
-        onClick={onClick}
-      />
+      <g className="cursor-pointer" onClick={onClick}>
+        <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
+        <circle
+          cx={pos.x} cy={pos.y} r={r}
+          fill={ghostColor} fillOpacity={0.5}
+          stroke={ghostColor} strokeWidth={2}
+          strokeDasharray="4 2"
+          className="animate-pulse pointer-events-none"
+        />
+      </g>
     );
   }
 
   if (validPlacement) {
     return (
-      <circle
-        cx={pos.x} cy={pos.y} r={r * 0.8}
-        fill="#00ff88" fillOpacity={0.5}
-        stroke="#00ff88" strokeWidth={1.5}
-        className="cursor-pointer animate-pulse"
-        onClick={onClick}
-      />
+      <g className="cursor-pointer" onClick={onClick}>
+        <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
+        <circle
+          cx={pos.x} cy={pos.y} r={r * 0.8}
+          fill="#00ff88" fillOpacity={0.5}
+          stroke="#00ff88" strokeWidth={1.5}
+          className="animate-pulse pointer-events-none"
+        />
+      </g>
     );
   }
 
@@ -83,7 +88,7 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
   if (onClick) {
     return (
       <circle
-        cx={pos.x} cy={pos.y} r={r}
+        cx={pos.x} cy={pos.y} r={hitR}
         fill="transparent"
         className="cursor-pointer"
         onClick={onClick}

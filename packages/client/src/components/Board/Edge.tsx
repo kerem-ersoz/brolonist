@@ -19,6 +19,7 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, on
   const [v1, v2] = edgeAdjacentVertices({ hex, direction });
   const p1 = vertexToPixel(v1, size);
   const p2 = vertexToPixel(v2, size);
+  const hitWidth = size * 0.3;
 
   if (building) {
     const color = PLAYER_COLORS[building.color] || '#999';
@@ -35,26 +36,38 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, on
   if (ghost) {
     const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
     return (
-      <line
-        x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke={ghostColor} strokeWidth={size * 0.12}
-        strokeLinecap="round" strokeOpacity={0.5}
-        strokeDasharray={`${size * 0.1} ${size * 0.06}`}
-        className="cursor-pointer animate-pulse"
-        onClick={onClick}
-      />
+      <g className="cursor-pointer" onClick={onClick}>
+        <line
+          x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+          stroke="transparent" strokeWidth={hitWidth}
+          strokeLinecap="round"
+        />
+        <line
+          x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+          stroke={ghostColor} strokeWidth={size * 0.12}
+          strokeLinecap="round" strokeOpacity={0.5}
+          strokeDasharray={`${size * 0.1} ${size * 0.06}`}
+          className="animate-pulse pointer-events-none"
+        />
+      </g>
     );
   }
 
   if (validPlacement) {
     return (
-      <line
-        x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke="#00ff88" strokeWidth={size * 0.08}
-        strokeLinecap="round" strokeOpacity={0.6}
-        className="cursor-pointer"
-        onClick={onClick}
-      />
+      <g className="cursor-pointer" onClick={onClick}>
+        <line
+          x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+          stroke="transparent" strokeWidth={hitWidth}
+          strokeLinecap="round"
+        />
+        <line
+          x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+          stroke="#00ff88" strokeWidth={size * 0.08}
+          strokeLinecap="round" strokeOpacity={0.6}
+          className="pointer-events-none"
+        />
+      </g>
     );
   }
 
@@ -63,7 +76,7 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, on
     return (
       <line
         x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke="transparent" strokeWidth={size * 0.15}
+        stroke="transparent" strokeWidth={hitWidth}
         strokeLinecap="round"
         className="cursor-pointer"
         onClick={onClick}

@@ -670,6 +670,8 @@ function GamePageInner() {
           timerSeconds={15}
           onConfirm={() => {
             sendMessage('discard_cards', { resources: handSelection });
+            setHandSelection({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });
+            setClearSelectionCounter((c) => c + 1);
           }}
         />
       )}

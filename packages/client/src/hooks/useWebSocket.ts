@@ -72,10 +72,12 @@ export function useWebSocket(gameId: string | null) {
 
     ws.onclose = () => {
       setConnectionStatus('disconnected');
-      // Exponential backoff reconnect
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-      reconnectAttempts.current++;
-      reconnectTimeout.current = setTimeout(connect, delay);
+      // Only reconnect if we still have the same gameId (not navigated away)
+      if (wsRef.current === ws) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+        reconnectAttempts.current++;
+        reconnectTimeout.current = setTimeout(connect, delay);
+      }
     };
 
     ws.onerror = () => {
@@ -89,7 +91,12 @@ export function useWebSocket(gameId: string | null) {
     connect();
     return () => {
       clearTimeout(reconnectTimeout.current);
+      // Send leave_game before disconnecting
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'leave_game', payload: {}, seq: 0, timestamp: new Date().toISOString() }));
+      }
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [connect]);
 

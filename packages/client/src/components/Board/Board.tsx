@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { HexTile } from './HexTile';
 import { Vertex } from './Vertex';
 import { Edge } from './Edge';
@@ -55,6 +55,34 @@ export function Board({
 
   if (!board) return null;
 
+  // --- Pan & Zoom ---
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const dragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const panStart = useRef({ x: 0, y: 0 });
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    dragging.current = true;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    panStart.current = { ...pan };
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  }, [pan]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    setPan({ x: panStart.current.x + dx, y: panStart.current.y + dy });
+  }, []);
+
+  const handlePointerUp = useCallback(() => { dragging.current = false; }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setZoom(z => Math.min(3, Math.max(0.3, z - e.deltaY * 0.001)));
+  }, []);
+
   const getBuildingWithColor = (b: Building | undefined): { type: string; playerId: string; color: string } | null => {
     if (!b) return null;
     return { type: b.type, playerId: b.playerId, color: playerColorMap[b.playerId] || 'white' };
@@ -88,7 +116,20 @@ export function Board({
   const edgeDirs = [EdgeDirection.NE, EdgeDirection.E, EdgeDirection.SE] as const;
 
   return (
-    <svg viewBox={viewBox} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+    <div
+      className="w-full h-full overflow-hidden cursor-grab active:cursor-grabbing"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      onWheel={handleWheel}
+    >
+    <svg
+      viewBox={viewBox}
+      className="w-full h-full"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' }}
+    >
       {/* Water hexes */}
       {board.waterHexes?.map((h, i) => (
         <HexTile key={`w${i}`} q={h.q} r={h.r} terrain="water" numberToken={null} size={size} />
@@ -152,5 +193,6 @@ export function Board({
       {/* Robber overlay */}
       <Robber hex={robberPosition} size={size} />
     </svg>
+    </div>
   );
 }

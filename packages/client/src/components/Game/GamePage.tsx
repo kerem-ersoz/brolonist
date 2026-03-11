@@ -15,6 +15,7 @@ import { TradeModal } from '../Trade/TradeModal';
 import { TradeOfferCard } from '../Trade/TradeOfferCard';
 import { GameLog } from '../Chat/GameLog';
 import { GameLayout } from '../Layout/GameLayout';
+import { RightSidebar } from '../Layout/RightSidebar';
 import { Navbar } from '../Layout/Navbar';
 import { GameWaitingRoom } from '../Lobby/GameWaitingRoom';
 
@@ -66,15 +67,44 @@ export function GamePage() {
 
   // Compute valid placement highlights to show on the board
   const validSettlements = useMemo(() => {
-    if (!gameState || !myPlayerId || effectiveBuildMode !== 'settlement') return [];
-    // Show all hex vertices as potential placements — server validates the actual click
-    const verts: Array<{ hex: HexCoord; direction: VertexDirection }> = [];
-    for (const hex of (gameState.board as BoardType).hexes) {
-      for (const dir of ['N', 'S'] as VertexDirection[]) {
-        verts.push({ hex: hex.coord, direction: dir });
+    if (!gameState || !myPlayerId) return [];
+
+    if (effectiveBuildMode === 'settlement') {
+      // Show all hex vertices as potential placements — server validates the actual click
+      const verts: Array<{ hex: HexCoord; direction: VertexDirection }> = [];
+      for (const hex of (gameState.board as BoardType).hexes) {
+        for (const dir of ['N', 'S'] as VertexDirection[]) {
+          verts.push({ hex: hex.coord, direction: dir });
+        }
       }
+      return verts;
     }
-    return verts;
+
+    if (effectiveBuildMode === 'city') {
+      // Show only the player's existing settlements as upgrade targets
+      const board = gameState.board as BoardType;
+      const buildings = board.vertexBuildings;
+      const verts: Array<{ hex: HexCoord; direction: VertexDirection }> = [];
+      // vertexBuildings is a plain object from server (serialized Map)
+      const entries = buildings instanceof Map
+        ? Array.from(buildings.entries())
+        : Object.entries(buildings || {});
+      for (const [key, building] of entries) {
+        const b = building as { type: string; playerId: string };
+        if (b.playerId === myPlayerId && b.type === 'settlement') {
+          const parts = key.split(',');
+          if (parts.length === 3) {
+            verts.push({
+              hex: { q: parseInt(parts[0]), r: parseInt(parts[1]) },
+              direction: parts[2] as VertexDirection,
+            });
+          }
+        }
+      }
+      return verts;
+    }
+
+    return [];
   }, [gameState, myPlayerId, effectiveBuildMode]);
 
   const validRoads = useMemo(() => {
@@ -312,10 +342,25 @@ export function GamePage() {
         }
         dice={gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null}
         rightPanel={
-          <GameLog
-            entries={gameState.log}
-            playerNames={playerNames}
-            onSendChat={(message) => sendMessage('chat', { message })}
+          <RightSidebar
+            chatLog={
+              <GameLog
+                entries={gameState.log}
+                playerNames={playerNames}
+                onSendChat={(message) => sendMessage('chat', { message })}
+              />
+            }
+            deckSize={(gameState as unknown as Record<string, unknown>).deckSize as number ?? 0}
+            players={gameState.players as unknown as Array<{
+              id: string; name: string; color: string; status: string;
+              victoryPoints: number; resourceCount?: number; devCardCount?: number;
+              resources: Record<string, number>; developmentCards: unknown[];
+              hasLongestRoad: boolean; hasLargestArmy: boolean;
+              roadsBuilt: number; settlementsBuilt: number; citiesBuilt: number;
+              knightsPlayed: number;
+            }>}
+            currentPlayerId={currentPlayer?.id || null}
+            myPlayerId={myPlayerId}
           />
         }
         tradeOffers={
@@ -332,6 +377,7 @@ export function GamePage() {
       {tradeModalOpen && me && (
         <TradeModal
           myResources={me.resources as unknown as Record<string, number>}
+          myColor={me.color}
           harbors={me.harbors ?? []}
           preselectedResource={tradePreselect}
           prefillGive={counterPrefillGive}

@@ -10,6 +10,7 @@ export function useWebSocket(gameId: string | null) {
   const token = useAuthStore((s) => s.token);
   const setConnectionStatus = useGameStore((s) => s.setConnectionStatus);
   const setGameState = useGameStore((s) => s.setGameState);
+  const setMyPlayerId = useGameStore((s) => s.setMyPlayerId);
   const applyDelta = useGameStore((s) => s.applyDelta);
   const setError = useGameStore((s) => s.setError);
   const addLogEntry = useGameStore((s) => s.addLogEntry);
@@ -33,6 +34,9 @@ export function useWebSocket(gameId: string | null) {
       try {
         const msg = JSON.parse(event.data);
         switch (msg.type) {
+          case 'player_id':
+            setMyPlayerId(msg.payload.playerId);
+            break;
           case 'game_state':
             setGameState(msg.payload);
             break;
@@ -47,17 +51,14 @@ export function useWebSocket(gameId: string | null) {
           case 'error':
             setError(msg.payload.message);
             break;
-          case 'chat':
-          case 'dice_rolled':
-          case 'trade_proposed':
-          case 'trade_completed':
-          case 'turn_changed':
-          case 'player_joined':
-          case 'player_left':
-            addLogEntry({ type: msg.type, message: JSON.stringify(msg.payload), timestamp: new Date().toISOString() });
-            break;
           case 'game_ended':
             setGameState(msg.payload);
+            break;
+          default:
+            // Log events like chat, dice_rolled, player_joined, etc.
+            if (msg.payload) {
+              addLogEntry({ type: msg.type, message: JSON.stringify(msg.payload), timestamp: new Date().toISOString() });
+            }
             break;
         }
       } catch { /* ignore parse errors */ }
@@ -76,7 +77,7 @@ export function useWebSocket(gameId: string | null) {
     };
 
     wsRef.current = ws;
-  }, [token, gameId, setConnectionStatus, setGameState, applyDelta, setError, addLogEntry]);
+  }, [token, gameId, setConnectionStatus, setGameState, setMyPlayerId, applyDelta, setError, addLogEntry]);
 
   useEffect(() => {
     connect();

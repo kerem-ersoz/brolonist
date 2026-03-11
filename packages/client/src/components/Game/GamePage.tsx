@@ -70,10 +70,29 @@ export function GamePage() {
 
   if (!gameState) {
     return (
-      <div className="h-screen bg-gray-900 flex items-center justify-center text-white">
-        <div className="text-center">
-          <div className="animate-spin text-4xl mb-4">⏳</div>
-          <p>{t('status.reconnecting')}</p>
+      <div className="h-screen bg-gray-900 flex flex-col">
+        <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
+        <div className="flex-1 flex items-center justify-center text-white">
+          <div className="text-center space-y-4">
+            {connectionStatus === 'connected' ? (
+              <>
+                <div className="text-6xl">🎲</div>
+                <h2 className="text-2xl font-bold">{t('lobby.title')}</h2>
+                <p className="text-gray-400">{t('lobby.waitingForPlayers')}</p>
+                <button
+                  onClick={() => sendMessage('start_game', {})}
+                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-lg"
+                >
+                  {t('lobby.startGame')}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="animate-spin text-4xl">⏳</div>
+                <p>{t('status.reconnecting')}</p>
+              </>
+            )}
+          </div>
         </div>
       </div>
     );

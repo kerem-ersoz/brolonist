@@ -14,7 +14,9 @@ import {
   handleTradeRespond,
   handleTradeWithBank,
   handleEndTurn,
+  getGame,
 } from './gameHandler.js';
+import { filterStateForPlayer } from './sync.js';
 
 interface WsMessage {
   type: string;
@@ -101,7 +103,18 @@ function handleMessage(playerId: string, msg: WsMessage): void {
 function handleJoinGame(playerId: string, payload: { gameId: string }): void {
   hub.joinRoom(playerId, payload.gameId);
   hub.broadcast(payload.gameId, 'player_joined', { playerId }, playerId);
-  hub.send(playerId, 'action_result', { success: true, type: 'join_game' });
+
+  // Tell the client their player ID
+  hub.send(playerId, 'player_id', { playerId });
+
+  // Send current game state if the game has been started
+  const state = getGame(payload.gameId);
+  if (state) {
+    hub.send(playerId, 'game_state', filterStateForPlayer(state, playerId));
+  } else {
+    // Game exists in lobby but not yet started — send lobby confirmation
+    hub.send(playerId, 'action_result', { success: true, type: 'join_game', gameId: payload.gameId });
+  }
 }
 
 function handleLeaveGame(playerId: string): void {

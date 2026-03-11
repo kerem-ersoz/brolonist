@@ -5,12 +5,12 @@ interface GameLayoutProps {
   playerHand: ReactNode;
   opponents: ReactNode;
   actions: ReactNode;
-  gameLog?: ReactNode;
+  rightPanel?: ReactNode;
   tradeOffers?: ReactNode;
   dice?: ReactNode;
 }
 
-export function GameLayout({ board, playerHand, opponents, actions, gameLog, tradeOffers, dice }: GameLayoutProps) {
+export function GameLayout({ board, playerHand, opponents, actions, rightPanel, tradeOffers, dice }: GameLayoutProps) {
   return (
     <div className="flex-1 bg-gray-900 flex flex-col lg:flex-row overflow-hidden relative">
       {/* Main area */}
@@ -27,10 +27,10 @@ export function GameLayout({ board, playerHand, opponents, actions, gameLog, tra
         <div className="h-[110px] flex-shrink-0" />
       </div>
 
-      {/* Game log — right sidebar on desktop */}
-      {gameLog && (
-        <div className="hidden lg:flex lg:flex-col lg:w-72 p-2 gap-2 overflow-y-auto border-l border-gray-700/50">
-          {gameLog}
+      {/* Right sidebar — game log + chat (desktop only) */}
+      {rightPanel && (
+        <div className="hidden lg:flex lg:flex-col lg:w-80 p-2 gap-2 border-l border-gray-700/50 overflow-hidden">
+          {rightPanel}
         </div>
       )}
 

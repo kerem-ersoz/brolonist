@@ -305,7 +305,13 @@ export function GamePage() {
           />
         }
         dice={gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null}
-        gameLog={<GameLog entries={gameState.log} playerNames={playerNames} />}
+        rightPanel={
+          <GameLog
+            entries={gameState.log}
+            playerNames={playerNames}
+            onSendChat={(message) => sendMessage('chat', { message })}
+          />
+        }
         tradeOffers={
           <TradeOfferCard
             offers={incomingOffers}

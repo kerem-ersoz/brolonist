@@ -1,4 +1,19 @@
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+
+function useCountdown(expiresAt?: number): number {
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)) : 0,
+  );
+  useEffect(() => {
+    if (!expiresAt) return;
+    const tick = () => setSecondsLeft(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+  return secondsLeft;
+}
 
 const RESOURCE_ICONS: Record<string, string> = {
   brick: '🧱',
@@ -14,6 +29,8 @@ interface TradeOffer {
   fromPlayerColor: string;
   offering: Record<string, number>;
   requesting: Record<string, number>;
+  openToOffers?: boolean;
+  expiresAt?: number;
 }
 
 interface TradeOfferCardProps {
@@ -47,16 +64,35 @@ export function TradeOfferCard({ offers, onAccept, onDecline, onCounter }: Trade
   if (offers.length === 0) return null;
 
   return (
-    <div className="fixed top-16 right-4 z-40 flex flex-col gap-2 max-w-xs">
-      {offers.map((offer) => (
+    <>
+      {offers.map((offer, i) => (
+        <OfferCard key={offer.id} offer={offer} index={i} total={offers.length} onAccept={onAccept} onDecline={onDecline} onCounter={onCounter} />
+      ))}
+    </>
+  );
+}
+
+function OfferCard({ offer, index, total, onAccept, onDecline, onCounter }: {
+  offer: TradeOffer; index: number; total: number;
+  onAccept: (id: string) => void; onDecline: (id: string) => void; onCounter: (o: TradeOffer) => void;
+}) {
+  const { t } = useTranslation();
+  const secondsLeft = useCountdown(offer.expiresAt);
+
+  return (
         <div
-          key={offer.id}
-          className="bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-3 animate-in slide-in-from-right"
+          style={{ flexShrink: 0 }}
+          className="bg-gray-800 border border-gray-600 rounded-lg shadow-xl p-3"
         >
           {/* Header */}
           <div className="flex items-center gap-2 mb-2">
             <div className={`w-3 h-3 rounded-full ${PLAYER_COLOR_DOT[offer.fromPlayerColor] ?? 'bg-gray-500'}`} />
-            <span className="text-white text-sm font-semibold">{offer.fromPlayerName} {t('trade.offers', 'offers')}:</span>
+            <span className="text-white text-sm font-semibold flex-1">{offer.fromPlayerName} {t('trade.offers', 'offers')}:</span>
+            {secondsLeft > 0 && (
+              <span className={`text-xs font-mono font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`}>
+                {secondsLeft}s
+              </span>
+            )}
           </div>
 
           {/* Give / Want */}
@@ -67,18 +103,25 @@ export function TradeOfferCard({ offers, onAccept, onDecline, onCounter }: Trade
             </div>
             <div className="text-gray-400">
               <span className="text-green-300 font-semibold">{t('trade.want')}:</span>{' '}
-              <span className="text-white">{formatResources(offer.requesting)}</span>
+              <span className="text-white">
+                {offer.openToOffers && !Object.values(offer.requesting).some(v => v > 0)
+                  ? `❓ ${t('trade.openToOffers', 'Open to offers')}`
+                  : formatResources(offer.requesting)}
+                {offer.openToOffers && Object.values(offer.requesting).some(v => v > 0) && ` + ❓`}
+              </span>
             </div>
           </div>
 
           {/* Actions */}
           <div className="flex gap-1.5">
-            <button
-              onClick={() => onAccept(offer.id)}
-              className="flex-1 py-1.5 rounded text-xs font-semibold bg-green-700 hover:bg-green-600 text-white transition-colors"
-            >
-              ✅ {t('trade.accept')}
-            </button>
+            {!offer.openToOffers && (
+              <button
+                onClick={() => onAccept(offer.id)}
+                className="flex-1 py-1.5 rounded text-xs font-semibold bg-green-700 hover:bg-green-600 text-white transition-colors"
+              >
+                ✅ {t('trade.accept')}
+              </button>
+            )}
             <button
               onClick={() => onDecline(offer.id)}
               className="flex-1 py-1.5 rounded text-xs font-semibold bg-red-700 hover:bg-red-600 text-white transition-colors"
@@ -93,7 +136,5 @@ export function TradeOfferCard({ offers, onAccept, onDecline, onCounter }: Trade
             </button>
           </div>
         </div>
-      ))}
-    </div>
   );
 }

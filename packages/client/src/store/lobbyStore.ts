@@ -5,7 +5,6 @@ interface GameListing {
   name: string;
   host: string;
   playerCount: number;
-  maxPlayers: number;
   mapType: string;
   isPrivate: boolean;
 }
@@ -23,8 +22,8 @@ interface GameLobby {
   name: string;
   hostId: string;
   players: LobbyPlayer[];
+  spectators?: { id: string; name: string }[];
   config: {
-    maxPlayers: number;
     victoryPoints: number;
     mapType: string;
     turnTimerSeconds: number;
@@ -38,7 +37,7 @@ interface LobbyStore {
   loading: boolean;
 
   fetchGames: () => Promise<void>;
-  createGame: (name: string, config?: Partial<GameLobby['config']>) => Promise<string>;
+  createGame: () => Promise<string>;
   setCurrentLobby: (lobby: GameLobby | null) => void;
   updateLobby: (update: Partial<GameLobby>) => void;
 }
@@ -61,7 +60,7 @@ export const useLobbyStore = create<LobbyStore>((set) => ({
     }
   },
 
-  createGame: async (name, config) => {
+  createGame: async () => {
     const token = localStorage.getItem('token');
     const res = await fetch('/api/games', {
       method: 'POST',
@@ -69,7 +68,7 @@ export const useLobbyStore = create<LobbyStore>((set) => ({
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ name, ...config }),
+      body: JSON.stringify({}),
     });
     const game = await res.json();
     set({ currentLobby: game });

@@ -11,10 +11,11 @@ interface VertexProps {
   size: number;
   building?: { type: string; playerId: string; color: string } | null;
   validPlacement?: boolean;
+  ghost?: { type: 'settlement' | 'city'; color: string } | null;
   onClick?: () => void;
 }
 
-export function Vertex({ hex, direction, size, building, validPlacement, onClick }: VertexProps) {
+export function Vertex({ hex, direction, size, building, validPlacement, ghost, onClick }: VertexProps) {
   const pos = vertexToPixel({ hex, direction }, size);
   const r = size * 0.18;
 
@@ -30,7 +31,40 @@ export function Vertex({ hex, direction, size, building, validPlacement, onClick
         />
       );
     }
+    // Existing settlement — if ghost city upgrade, overlay the ghost
+    if (ghost?.type === 'city') {
+      const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
+      return (
+        <g className="cursor-pointer" onClick={onClick}>
+          <circle cx={pos.x} cy={pos.y} r={r} fill={color} stroke="#000" strokeWidth={1} />
+          <rect
+            x={pos.x - r * 1.2} y={pos.y - r * 1.2}
+            width={r * 2.4} height={r * 2.4}
+            fill={ghostColor} fillOpacity={0.5}
+            stroke={ghostColor} strokeWidth={2}
+            strokeDasharray="4 2"
+            rx={2}
+            className="animate-pulse"
+          />
+        </g>
+      );
+    }
     return <circle cx={pos.x} cy={pos.y} r={r} fill={color} stroke="#000" strokeWidth={1} />;
+  }
+
+  // Ghost settlement (no existing building)
+  if (ghost?.type === 'settlement') {
+    const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
+    return (
+      <circle
+        cx={pos.x} cy={pos.y} r={r}
+        fill={ghostColor} fillOpacity={0.5}
+        stroke={ghostColor} strokeWidth={2}
+        strokeDasharray="4 2"
+        className="cursor-pointer animate-pulse"
+        onClick={onClick}
+      />
+    );
   }
 
   if (validPlacement) {
@@ -40,6 +74,18 @@ export function Vertex({ hex, direction, size, building, validPlacement, onClick
         fill="#00ff88" fillOpacity={0.5}
         stroke="#00ff88" strokeWidth={1.5}
         className="cursor-pointer animate-pulse"
+        onClick={onClick}
+      />
+    );
+  }
+
+  // Invisible clickable hit target (build phase, no highlight)
+  if (onClick) {
+    return (
+      <circle
+        cx={pos.x} cy={pos.y} r={r}
+        fill="transparent"
+        className="cursor-pointer"
         onClick={onClick}
       />
     );

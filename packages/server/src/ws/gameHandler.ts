@@ -71,17 +71,32 @@ import {
   updateLongestRoadHolder,
   hasResources,
   subtractResources,
+  addResources,
   vertexAdjacentEdges,
 } from '@brolonist/shared';
 
 import { hub } from './hub.js';
-import { filterStateForPlayer } from './sync.js';
+import { filterStateForPlayer, registerFreeRoadsGetter } from './sync.js';
 
 // ---------------------------------------------------------------------------
 // In-memory game state store
 // ---------------------------------------------------------------------------
 
 const games = new Map<string, GameState>();
+
+// Track the phase before a dev card was played so we can return to it.
+// Key: gameId, Value: the phase (e.g. RollDice) that should be restored after the card resolves.
+const preDevCardPhase = new Map<string, string>();
+
+// Track free road placements from Road Building dev card.
+// Key: gameId, Value: { playerId, remaining, phaseBefore }
+const freeRoadsRemaining = new Map<string, { playerId: string; remaining: number; phaseBefore: string }>();
+
+// Register getter so sync.ts can include freeRoadsRemaining in filtered state
+registerFreeRoadsGetter((gameId: string) => {
+  const info = freeRoadsRemaining.get(gameId);
+  return info ? info.remaining : 0;
+});
 
 export function getGame(gameId: string): GameState | undefined {
   return games.get(gameId);
@@ -93,6 +108,24 @@ export function getGame(gameId: string): GameState | undefined {
 
 function sendError(playerId: string, message: string): void {
   hub.send(playerId, 'error', { code: 'GAME_ERROR', message });
+}
+
+/** Log per-player resource gains from distribution. */
+function logDistribution(state: GameState, distribution: Record<string, Resources>): void {
+  for (const [pid, resources] of Object.entries(distribution)) {
+    const total = Object.values(resources).reduce((a: number, b: number) => a + b, 0);
+    if (total === 0) continue;
+    const parts: string[] = [];
+    for (const [res, count] of Object.entries(resources)) {
+      if ((count as number) > 0) parts.push(`${count} ${res}`);
+    }
+    addLogEntry(state, {
+      type: 'distribute',
+      message: `received ${parts.join(', ')}`,
+      playerId: pid,
+      data: { resources },
+    });
+  }
 }
 
 function broadcastState(gameId: string, state: GameState): void {
@@ -202,6 +235,41 @@ export function initializeGame(
 }
 
 // ---------------------------------------------------------------------------
+// Trade expiry timers
+// ---------------------------------------------------------------------------
+
+const tradeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleTradeExpiry(gameId: string, offerId: string, delayMs: number): void {
+  // Clear any existing timer for this offer
+  const key = `${gameId}:${offerId}`;
+  const existing = tradeTimers.get(key);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(() => {
+    tradeTimers.delete(key);
+    const state = games.get(gameId);
+    if (!state) return;
+    const offer = state.activeTradeOffers.find(o => o.id === offerId);
+    if (!offer || offer.status !== 'open') return;
+    offer.status = 'cancelled';
+    state.activeTradeOffers = state.activeTradeOffers.filter(o => o.id !== offerId);
+    addLogEntry(state, { type: 'trade_expired', message: 'trade offer expired', playerId: offer.fromPlayerId });
+    broadcastState(gameId, state);
+  }, delayMs);
+  tradeTimers.set(key, timer);
+}
+
+function cancelTradeTimer(gameId: string, offerId: string): void {
+  const key = `${gameId}:${offerId}`;
+  const existing = tradeTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    tradeTimers.delete(key);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Game action handlers
 // ---------------------------------------------------------------------------
 
@@ -229,6 +297,9 @@ export function handleRollDice(playerId: string, gameId: string): void {
   if (current.id !== playerId) return sendError(playerId, 'Not your turn');
   if (state.currentPhase !== GamePhase.RollDice) return sendError(playerId, 'Cannot roll now');
 
+  // Clear any pre-roll dev card tracking since the dice are now being rolled
+  preDevCardPhase.delete(gameId);
+
   const dice = rollDice();
   state.dice = dice;
   const diceSum = dice[0] + dice[1];
@@ -245,7 +316,7 @@ export function handleRollDice(playerId: string, gameId: string): void {
     }
   } else {
     const distribution = distributeResources(state, diceSum);
-    addLogEntry(state, { type: 'distribute', message: 'Resources distributed', data: { distribution } });
+    logDistribution(state, distribution);
     transitionPhase(state, GamePhase.TradeAndBuild);
   }
 
@@ -329,17 +400,37 @@ export function handlePlaceRoad(
     addLogEntry(state, { type: 'place_road', message: 'Road placed (setup)', playerId });
     advanceSetupPhase(state);
   } else {
-    if (state.currentPhase !== GamePhase.TradeAndBuild && state.currentPhase !== GamePhase.SpecialBuild) {
+    // Allow road placement during RollDice if Road Building was played pre-roll
+    const freeRoadInfo = freeRoadsRemaining.get(gameId);
+    const isFreeRoad = freeRoadInfo && freeRoadInfo.playerId === playerId && freeRoadInfo.remaining > 0;
+    const allowedPhase = state.currentPhase === GamePhase.TradeAndBuild
+      || state.currentPhase === GamePhase.SpecialBuild
+      || (state.currentPhase === GamePhase.RollDice && (preDevCardPhase.has(gameId) || isFreeRoad));
+    if (!allowedPhase && !isFreeRoad) {
       return sendError(playerId, 'Cannot build in this phase');
     }
     const current = getCurrentPlayer(state);
     if (current.id !== playerId) return sendError(playerId, 'Not your turn');
 
-    const error = canPlaceRoad(state, playerId, payload.edge, false);
+    const error = canPlaceRoad(state, playerId, payload.edge, !!isFreeRoad);
     if (error) return sendError(playerId, error);
 
     const player = state.players.find((p) => p.id === playerId)!;
-    player.resources = subtractResources(player.resources, BUILDING_COSTS[BuildingType.Road]);
+
+    // Free road from Road Building: don't charge resources
+    if (isFreeRoad) {
+      freeRoadInfo.remaining -= 1;
+      if (freeRoadInfo.remaining <= 0) {
+        // Restore original phase
+        if (freeRoadInfo.phaseBefore === GamePhase.RollDice) {
+          state.currentPhase = GamePhase.RollDice;
+        }
+        freeRoadsRemaining.delete(gameId);
+      }
+    } else {
+      player.resources = subtractResources(player.resources, BUILDING_COSTS[BuildingType.Road]);
+    }
+
     state.board.edgeBuildings.set(edgeKey(payload.edge), {
       type: BuildingType.Road,
       playerId,
@@ -347,7 +438,7 @@ export function handlePlaceRoad(
     player.roadsBuilt += 1;
 
     updateLongestRoadHolder(state);
-    addLogEntry(state, { type: 'place_road', message: 'Road placed', playerId });
+    addLogEntry(state, { type: 'place_road', message: isFreeRoad ? 'Road placed (free)' : 'Road placed', playerId });
   }
 
   for (const p of state.players) {
@@ -425,11 +516,18 @@ export function handlePlayDevCard(
   const error = canPlayDevCard(state, playerId, payload.cardType);
   if (error) return sendError(playerId, error);
 
+  // Remember the phase before playing so we can return to it (e.g. RollDice)
+  const phaseBefore = state.currentPhase;
+
   switch (payload.cardType) {
     case DevelopmentCardType.Knight: {
-      executePlayKnight(state, playerId);
+      executePlayKnight(state, playerId); // sets phase to MoveRobber
       updateLargestArmyHolder(state);
       addLogEntry(state, { type: 'play_dev_card', message: 'Played Knight', playerId });
+      // If played before rolling, remember so robber resolution returns to RollDice
+      if (phaseBefore === GamePhase.RollDice) {
+        preDevCardPhase.set(gameId, phaseBefore);
+      }
       break;
     }
     case DevelopmentCardType.RoadBuilding: {
@@ -439,7 +537,8 @@ export function handlePlayDevCard(
         message: `Played Road Building (${freeRoads} roads)`,
         playerId,
       });
-      hub.send(playerId, 'action_result', { success: true, type: 'play_dev_card', freeRoads });
+      // Track free road placements
+      freeRoadsRemaining.set(gameId, { playerId, remaining: freeRoads, phaseBefore });
       break;
     }
     case DevelopmentCardType.YearOfPlenty: {
@@ -448,6 +547,10 @@ export function handlePlayDevCard(
       if (!resource1 || !resource2) return sendError(playerId, 'Must specify two resources');
       executeYearOfPlenty(state, playerId, resource1, resource2);
       addLogEntry(state, { type: 'play_dev_card', message: 'Played Year of Plenty', playerId });
+      // Instant-resolve: restore original phase
+      if (phaseBefore === GamePhase.RollDice) {
+        state.currentPhase = GamePhase.RollDice;
+      }
       break;
     }
     case DevelopmentCardType.Monopoly: {
@@ -459,6 +562,10 @@ export function handlePlayDevCard(
         message: `Played Monopoly on ${resourceType}, took ${stolen}`,
         playerId,
       });
+      // Instant-resolve: restore original phase
+      if (phaseBefore === GamePhase.RollDice) {
+        state.currentPhase = GamePhase.RollDice;
+      }
       break;
     }
     default:
@@ -503,7 +610,14 @@ export function handleMoveRobber(
     }
   }
 
-  transitionPhase(state, GamePhase.TradeAndBuild);
+  // If a dev card (knight) was played before rolling, return to RollDice
+  const savedPhase = preDevCardPhase.get(gameId);
+  if (savedPhase === GamePhase.RollDice) {
+    preDevCardPhase.delete(gameId);
+    transitionPhase(state, GamePhase.RollDice);
+  } else {
+    transitionPhase(state, GamePhase.TradeAndBuild);
+  }
   broadcastAndCheckVictory(gameId, state);
   scheduleBotTurn(gameId);
 }
@@ -530,6 +644,7 @@ export function handleDiscardCards(
 
   // If all pending discards are done, transition to robber
   if (state.pendingDiscards.length === 0) {
+    clearDiscardTimer(gameId);
     transitionPhase(state, GamePhase.MoveRobber);
   }
 
@@ -540,7 +655,7 @@ export function handleDiscardCards(
 export function handleTradeOffer(
   playerId: string,
   gameId: string,
-  payload: { offering: Resources; requesting: Resources },
+  payload: { offering: Resources; requesting: Resources; openToOffers?: boolean },
 ): void {
   const state = games.get(gameId);
   if (!state) return sendError(playerId, 'Game not found');
@@ -553,25 +668,36 @@ export function handleTradeOffer(
     return sendError(playerId, 'Insufficient resources for trade offer');
   }
 
+  const isOpen = payload.openToOffers ?? false;
+
+  const TRADE_RESPONSE_TTL = 12_000; // 12 seconds for others to respond
+
   const offer: TradeOffer = {
     id: uuidv4(),
     fromPlayerId: playerId,
     offering: payload.offering,
     requesting: payload.requesting,
+    openToOffers: isOpen,
     responses: {},
     counterOffers: {},
     status: 'open',
+    expiresAt: Date.now() + TRADE_RESPONSE_TTL,
   };
 
   state.activeTradeOffers.push(offer);
 
   // Human-readable log entry
   const fmtRes = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
-  addLogEntry(state, { type: 'trade_offer', message: `offers ${fmtRes(offer.offering)} for ${fmtRes(offer.requesting)}`, playerId });
+  const requestStr = isOpen && Object.values(offer.requesting).every(v => v === 0) ? '(open to offers)' : fmtRes(offer.requesting);
+  addLogEntry(state, { type: 'trade_offer', message: `offers ${fmtRes(offer.offering)} for ${requestStr}`, playerId });
 
   hub.broadcast(gameId, 'trade_proposed', { offer });
+  broadcastState(gameId, state);
 
-  // Bot auto-responses (after a delay)
+  // Auto-expire trade after TTL
+  scheduleTradeExpiry(gameId, offer.id, TRADE_RESPONSE_TTL);
+
+  // Bot auto-responses (after a delay) — bots only accept non-open trades
   setTimeout(() => {
     const s = games.get(gameId);
     if (!s) return;
@@ -579,14 +705,21 @@ export function handleTradeOffer(
     if (!o || o.status !== 'open') return;
 
     for (const bot of s.players.filter(p => p.isBot && p.id !== playerId && p.status !== 'quit' as never)) {
+      if (isOpen) {
+        // Bots decline open-to-offers trades
+        o.responses[bot.id] = 'decline';
+        addLogEntry(s, { type: 'trade_decline', message: 'declined the trade', playerId: bot.id });
+        continue;
+      }
       // Simple bot trade logic: accept if bot has the requested resources and it's a fair-ish trade
       if (hasResources(bot.resources, offer.requesting)) {
         // Greedy: accept if giving fewer or equal total cards than receiving
         const giveTotal = Object.values(offer.requesting).reduce((a, b) => a + b, 0);
         const getTotal = Object.values(offer.offering).reduce((a, b) => a + b, 0);
         if (getTotal >= giveTotal) {
-          handleTradeRespond(bot.id, gameId, { offerId: offer.id, response: 'accept' });
-          return; // First bot to accept wins
+          o.responses[bot.id] = 'accept';
+          addLogEntry(s, { type: 'trade_accept', message: 'wants to trade', playerId: bot.id });
+          continue;
         }
       }
       // Otherwise decline
@@ -594,6 +727,15 @@ export function handleTradeOffer(
       addLogEntry(s, { type: 'trade_decline', message: 'declined the trade', playerId: bot.id });
     }
     broadcastState(gameId, s);
+
+    // Check if all other players have declined — auto-remove after 2s
+    const otherPlayers = s.players.filter(p => p.id !== playerId && p.status !== 'quit' as never);
+    const allDeclined = otherPlayers.length > 0 && otherPlayers.every(p => o.responses[p.id] === 'decline');
+    if (allDeclined) {
+      o.expiresAt = Date.now() + 2_000;
+      scheduleTradeExpiry(gameId, offer.id, 2_000);
+      broadcastState(gameId, s);
+    }
   }, 1500);
 }
 
@@ -609,30 +751,109 @@ export function handleTradeRespond(
   if (!offer || offer.status !== 'open') return sendError(playerId, 'Trade offer not found or closed');
   if (offer.fromPlayerId === playerId) return sendError(playerId, 'Cannot respond to your own offer');
 
+  // Block accept on open-to-offers trades — only counter or decline allowed
+  if (payload.response === 'accept' && offer.openToOffers) {
+    return sendError(playerId, 'This trade is open to offers. You can only counter-offer or decline.');
+  }
+
   offer.responses[playerId] = payload.response;
 
   if (payload.response === 'accept') {
-    // Re-validate both players have resources before executing
-    const fromPlayer = state.players.find((p) => p.id === offer.fromPlayerId);
+    // Validate the accepting player has the required resources
     const toPlayer = state.players.find((p) => p.id === playerId);
-    if (!fromPlayer || !toPlayer) return sendError(playerId, 'Player not found');
-    if (!hasResources(fromPlayer.resources, offer.offering))
-      return sendError(playerId, 'Offering player no longer has sufficient resources');
-    if (!hasResources(toPlayer.resources, offer.requesting))
+    if (!toPlayer) return sendError(playerId, 'Player not found');
+    if (!hasResources(toPlayer.resources, offer.requesting)) {
       return sendError(playerId, 'You do not have sufficient resources to accept');
+    }
 
-    const tradeError = executeTrade(state, offer.fromPlayerId, playerId, offer.offering, offer.requesting);
-    if (tradeError) return sendError(playerId, tradeError);
-    offer.status = 'completed';
-    const fromName = state.players.find(p => p.id === offer.fromPlayerId)?.name || 'Unknown';
-    const toName = state.players.find(p => p.id === playerId)?.name || 'Unknown';
-    const fmtR = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
-    addLogEntry(state, { type: 'trade_completed', message: `${fromName} traded ${fmtR(offer.offering)} with ${toName} for ${fmtR(offer.requesting)}` });
-    hub.broadcast(gameId, 'trade_completed', { offerId: offer.id, acceptedBy: playerId });
+    // Extend TTL to 30s for initiator to confirm
+    const TRADE_CONFIRM_TTL = 30_000;
+    offer.expiresAt = Date.now() + TRADE_CONFIRM_TTL;
+    scheduleTradeExpiry(gameId, offer.id, TRADE_CONFIRM_TTL);
+
+    addLogEntry(state, { type: 'trade_accept', message: 'wants to trade', playerId });
   } else if (payload.response === 'counter' && payload.counter) {
     offer.counterOffers[playerId] = payload.counter;
+    addLogEntry(state, { type: 'trade_counter', message: 'made a counter-offer', playerId });
+  } else if (payload.response === 'decline') {
+    addLogEntry(state, { type: 'trade_decline', message: 'declined the trade', playerId });
   }
 
+  // Check if all other players have declined — auto-remove after 2s
+  const otherPlayers = state.players.filter(p => p.id !== offer.fromPlayerId && p.status !== 'quit' as never);
+  const allDeclined = otherPlayers.length > 0 && otherPlayers.every(p => offer.responses[p.id] === 'decline');
+  if (allDeclined) {
+    scheduleTradeExpiry(gameId, offer.id, 2_000);
+    offer.expiresAt = Date.now() + 2_000;
+  }
+
+  broadcastState(gameId, state);
+}
+
+export function handleTradeConfirm(
+  playerId: string,
+  gameId: string,
+  payload: { offerId: string; withPlayerId: string },
+): void {
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+
+  const offer = state.activeTradeOffers.find((o) => o.id === payload.offerId);
+  if (!offer || offer.status !== 'open') return sendError(playerId, 'Trade offer not found or closed');
+  if (offer.fromPlayerId !== playerId) return sendError(playerId, 'Only the trade initiator can confirm');
+
+  const acceptedResponse = offer.responses[payload.withPlayerId];
+  if (acceptedResponse !== 'accept') return sendError(playerId, 'That player has not accepted the trade');
+
+  // Re-validate both players have resources before executing
+  const fromPlayer = state.players.find((p) => p.id === offer.fromPlayerId);
+  const toPlayer = state.players.find((p) => p.id === payload.withPlayerId);
+  if (!fromPlayer || !toPlayer) return sendError(playerId, 'Player not found');
+  if (!hasResources(fromPlayer.resources, offer.offering))
+    return sendError(playerId, 'You no longer have sufficient resources');
+  if (!hasResources(toPlayer.resources, offer.requesting))
+    return sendError(playerId, 'That player no longer has sufficient resources');
+
+  const tradeError = executeTrade(state, offer.fromPlayerId, payload.withPlayerId, offer.offering, offer.requesting);
+  if (tradeError) return sendError(playerId, tradeError);
+  offer.status = 'completed';
+  const fromName = fromPlayer.name || 'Unknown';
+  const toName = toPlayer.name || 'Unknown';
+  const fmtR = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
+  addLogEntry(state, {
+    type: 'trade_completed',
+    message: `${fromName} traded ${fmtR(offer.offering)} with ${toName} for ${fmtR(offer.requesting)}`,
+    data: {
+      fromPlayerId: offer.fromPlayerId,
+      toPlayerId: payload.withPlayerId,
+      offering: offer.offering,
+      requesting: offer.requesting,
+    },
+  });
+  hub.broadcast(gameId, 'trade_completed', { offerId: offer.id, acceptedBy: payload.withPlayerId });
+  cancelTradeTimer(gameId, offer.id);
+  // Remove completed offer from active list
+  state.activeTradeOffers = state.activeTradeOffers.filter(o => o.id !== offer.id);
+  broadcastState(gameId, state);
+}
+
+export function handleTradeCancel(
+  playerId: string,
+  gameId: string,
+  payload: { offerId: string },
+): void {
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+
+  const offer = state.activeTradeOffers.find((o) => o.id === payload.offerId);
+  if (!offer || offer.status !== 'open') return sendError(playerId, 'Trade offer not found or closed');
+  if (offer.fromPlayerId !== playerId) return sendError(playerId, 'Only the trade initiator can cancel');
+
+  offer.status = 'cancelled';
+  cancelTradeTimer(gameId, offer.id);
+  addLogEntry(state, { type: 'trade_cancel', message: 'cancelled the trade offer', playerId });
+  // Remove cancelled offer from active list
+  state.activeTradeOffers = state.activeTradeOffers.filter(o => o.id !== offer.id);
   broadcastState(gameId, state);
 }
 
@@ -684,6 +905,129 @@ export function handlePassSpecialBuild(playerId: string, gameId: string): void {
   addLogEntry(state, { type: 'pass_special_build', message: 'Passed special build', playerId });
 
   broadcastState(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+// ---------------------------------------------------------------------------
+// Dev/debug actions (development only)
+// ---------------------------------------------------------------------------
+
+export function handleDevGiveResources(
+  playerId: string,
+  gameId: string,
+  payload: { resources: Partial<Resources> },
+): void {
+  if (process.env.NODE_ENV === 'production') return sendError(playerId, 'Not available');
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return sendError(playerId, 'Player not found');
+
+  const toAdd: Resources = {
+    brick: Math.max(0, payload.resources.brick ?? 0),
+    lumber: Math.max(0, payload.resources.lumber ?? 0),
+    ore: Math.max(0, payload.resources.ore ?? 0),
+    grain: Math.max(0, payload.resources.grain ?? 0),
+    wool: Math.max(0, payload.resources.wool ?? 0),
+  };
+  player.resources = addResources(player.resources, toAdd);
+  addLogEntry(state, { type: 'chat', message: '[DEV] Gave self resources', playerId });
+  broadcastState(gameId, state);
+}
+
+export function handleDevGiveDevCard(
+  playerId: string,
+  gameId: string,
+  payload: { cardType: string },
+): void {
+  if (process.env.NODE_ENV === 'production') return sendError(playerId, 'Not available');
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return sendError(playerId, 'Player not found');
+
+  const validTypes = ['knight', 'victory_point', 'road_building', 'year_of_plenty', 'monopoly'];
+  if (!validTypes.includes(payload.cardType)) return sendError(playerId, 'Invalid card type');
+
+  player.developmentCards.push({
+    type: payload.cardType as DevelopmentCardType,
+    turnPurchased: state.turnNumber,
+  });
+  addLogEntry(state, { type: 'chat', message: `[DEV] Gave self ${payload.cardType}`, playerId });
+  broadcastState(gameId, state);
+}
+
+// ---------------------------------------------------------------------------
+// Dev: Force a 7 roll
+// ---------------------------------------------------------------------------
+
+export function handleDevRollSeven(playerId: string, gameId: string): void {
+  if (process.env.NODE_ENV === 'production') return sendError(playerId, 'Not available');
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+  if (state.currentPhase !== GamePhase.RollDice) return sendError(playerId, 'Cannot roll now');
+
+  const current = getCurrentPlayer(state);
+  if (current.id !== playerId) return sendError(playerId, 'Not your turn');
+
+  preDevCardPhase.delete(gameId);
+  state.dice = [4, 3];
+  addLogEntry(state, { type: 'roll_dice', message: 'Rolled 7 [DEV]', playerId, data: { dice: [4, 3] } });
+
+  const mustDiscard = getPlayersWhoMustDiscard(state);
+  if (mustDiscard.length > 0) {
+    state.pendingDiscards = mustDiscard;
+    transitionPhase(state, GamePhase.Discard);
+    scheduleDiscardTimer(gameId);
+  } else {
+    transitionPhase(state, GamePhase.MoveRobber);
+  }
+
+  broadcastAndCheckVictory(gameId, state);
+  scheduleBotTurn(gameId);
+}
+
+// ---------------------------------------------------------------------------
+// Discard auto-timer (10 seconds)
+// ---------------------------------------------------------------------------
+
+const discardTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleDiscardTimer(gameId: string): void {
+  clearDiscardTimer(gameId);
+  const timer = setTimeout(() => {
+    discardTimers.delete(gameId);
+    autoDiscardRemaining(gameId);
+  }, 15_000);
+  discardTimers.set(gameId, timer);
+}
+
+function clearDiscardTimer(gameId: string): void {
+  const existing = discardTimers.get(gameId);
+  if (existing) {
+    clearTimeout(existing);
+    discardTimers.delete(gameId);
+  }
+}
+
+function autoDiscardRemaining(gameId: string): void {
+  const state = games.get(gameId);
+  if (!state || state.currentPhase !== GamePhase.Discard) return;
+  if (state.pendingDiscards.length === 0) return;
+
+  for (const pid of [...state.pendingDiscards]) {
+    const player = state.players.find((p) => p.id === pid);
+    if (!player) continue;
+    const count = Math.floor(totalCards(player.resources) / 2);
+    autoDiscardRandom(player, count);
+    state.pendingDiscards = state.pendingDiscards.filter((id) => id !== pid);
+    addLogEntry(state, { type: 'discard', message: 'Auto-discarded (time expired)', playerId: pid });
+  }
+
+  if (state.pendingDiscards.length === 0) {
+    transitionPhase(state, GamePhase.MoveRobber);
+  }
+  broadcastAndCheckVictory(gameId, state);
   scheduleBotTurn(gameId);
 }
 
@@ -829,7 +1173,7 @@ function botRollDice(gameId: string, state: GameState, bot: Player): void {
     }
   } else {
     const distribution = distributeResources(state, diceSum);
-    addLogEntry(state, { type: 'distribute', message: 'Resources distributed', data: { distribution } });
+    logDistribution(state, distribution);
     transitionPhase(state, GamePhase.TradeAndBuild);
   }
 

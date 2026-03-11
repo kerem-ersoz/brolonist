@@ -63,24 +63,14 @@ export function useWebSocket(gameId: string | null) {
             useGameStore.getState().setGameResult(msg.payload);
             break;
           case 'trade_proposed': {
-            // Add the offer to activeTradeOffers in game state
-            const gs = useGameStore.getState().gameState;
-            if (gs) {
-              const offers = [...(gs.activeTradeOffers || []), msg.payload.offer];
-              useGameStore.getState().applyDelta({ activeTradeOffers: offers } as never);
-            }
+            // State is already updated via game_state broadcast — just log it
             const o = msg.payload.offer;
             const res = (r: Record<string, number>) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
             addLogEntry({ type: 'trade_proposed', message: `offers ${res(o.offering)} for ${res(o.requesting)}`, playerId: o.fromPlayerId, timestamp: new Date().toISOString() });
             break;
           }
           case 'trade_completed': {
-            // Remove completed offer from active offers
-            const gs2 = useGameStore.getState().gameState;
-            if (gs2) {
-              const remaining = (gs2.activeTradeOffers || []).filter((o: unknown) => (o as { id: string }).id !== msg.payload.offerId);
-              useGameStore.getState().applyDelta({ activeTradeOffers: remaining } as never);
-            }
+            // State is already updated via game_state broadcast — just log it
             addLogEntry({ type: 'trade_completed', message: `Trade completed!`, timestamp: new Date().toISOString() });
             break;
           }

@@ -34,11 +34,19 @@ export const DiscardCardsSchema = z.object({ resources: ResourcesSchema });
 export const TradeOfferSchema = z.object({
   offering: ResourcesSchema,
   requesting: ResourcesSchema,
+  openToOffers: z.boolean().optional(),
 });
 export const TradeRespondSchema = z.object({
   offerId: z.string(),
   response: z.enum(['accept', 'decline', 'counter']),
   counter: TradeOfferSchema.optional(),
+});
+export const TradeConfirmSchema = z.object({
+  offerId: z.string(),
+  withPlayerId: z.string(),
+});
+export const TradeCancelSchema = z.object({
+  offerId: z.string(),
 });
 export const TradeWithBankSchema = z.object({
   giving: z.enum(['brick', 'lumber', 'ore', 'grain', 'wool']),
@@ -53,10 +61,10 @@ export const ChatSchema = z.object({ message: z.string().min(1).max(500) });
 
 // Union of all client message types
 export const CLIENT_MESSAGE_TYPES = [
-  'join_game', 'leave_game', 'ready', 'start_game',
+  'join_game', 'leave_game', 'ready', 'start_game', 'update_config',
   'roll_dice', 'place_settlement', 'place_road', 'place_city',
   'buy_dev_card', 'play_dev_card', 'move_robber', 'discard_cards',
-  'trade_offer', 'trade_respond', 'trade_with_bank', 'end_turn', 'chat',
+  'trade_offer', 'trade_respond', 'trade_confirm', 'trade_cancel', 'trade_with_bank', 'end_turn', 'chat',
 ] as const;
 
 export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number];

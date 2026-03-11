@@ -108,9 +108,11 @@ export interface TradeOffer {
   fromPlayerId: PlayerId;
   offering: Resources;
   requesting: Resources;
+  openToOffers: boolean;
   responses: Record<PlayerId, 'accept' | 'decline' | 'counter'>;
   counterOffers: Record<PlayerId, { offering: Resources; requesting: Resources }>;
   status: 'open' | 'completed' | 'cancelled';
+  expiresAt: number; // Unix ms timestamp
 }
 
 export interface GameConfig {

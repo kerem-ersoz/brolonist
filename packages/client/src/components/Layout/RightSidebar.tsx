@@ -31,20 +31,22 @@ interface RightSidebarProps {
 export function RightSidebar({ chatLog, deckSize, players, currentPlayerId, myPlayerId }: RightSidebarProps) {
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Chat / Game Log — takes available space */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      {/* Chat / Game Log — fixed at 50% */}
+      <div className="h-1/2 min-h-0 overflow-hidden flex-shrink-0">
         {chatLog}
       </div>
 
-      {/* Bank cards row */}
+      {/* Bank cards row — centered on right edge */}
       <BankDisplay deckSize={deckSize} players={players} myPlayerId={myPlayerId} />
 
-      {/* Player cards — fixed height for ~4 players, scrollable for more */}
-      <SidebarPlayerList
-        players={players}
-        currentPlayerId={currentPlayerId}
-        myPlayerId={myPlayerId}
-      />
+      {/* Player cards — fills remaining space, scrolls only for >4 */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <SidebarPlayerList
+          players={players}
+          currentPlayerId={currentPlayerId}
+          myPlayerId={myPlayerId}
+        />
+      </div>
     </div>
   );
 }

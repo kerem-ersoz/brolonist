@@ -16,6 +16,7 @@
     "@brolonist/shared": "*",
     "@fastify/cors": "^10.0.0",
     "@fastify/jwt": "^9.0.0",
+    "@fastify/static": "^9.0.0",
     "@fastify/websocket": "^11.0.0",
     "@prisma/client": "^6.0.0",
     "fastify": "^5.2.0",

@@ -5,6 +5,7 @@ interface LogEntry {
   playerId?: string;
   type: string;
   message: string;
+  data?: Record<string, unknown>;
 }
 
 interface GameLogProps {
@@ -17,6 +18,23 @@ const COLOR_MAP: Record<string, string> = {
   red: 'text-red-400', blue: 'text-blue-400', white: 'text-gray-200', orange: 'text-orange-400',
   green: 'text-green-400', brown: 'text-amber-500', purple: 'text-purple-400', teal: 'text-teal-400',
 };
+
+const RESOURCE_EMOJI: Record<string, string> = {
+  brick: '🧱', lumber: '🪵', ore: '⛏️', grain: '🌾', wool: '🐑',
+};
+
+function formatResources(data?: Record<string, unknown>): string | null {
+  const resources = data?.resources as Record<string, number> | undefined;
+  if (!resources) return null;
+  const parts: string[] = [];
+  for (const [res, count] of Object.entries(resources)) {
+    if (count > 0) {
+      const emoji = RESOURCE_EMOJI[res] || res;
+      parts.push(`${emoji}${count > 1 ? `×${count}` : ''}`);
+    }
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
 
 export function GameLog({ entries, playerNames, onSendChat }: GameLogProps) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -47,10 +65,16 @@ export function GameLog({ entries, playerNames, onSendChat }: GameLogProps) {
           const player = entry.playerId ? playerNames[entry.playerId] : null;
           const colorClass = player ? (COLOR_MAP[player.color] || 'text-gray-300') : 'text-gray-500';
           const isChat = entry.type === 'chat';
+          const isDistribute = entry.type === 'distribute';
+          const resourceStr = isDistribute ? formatResources(entry.data) : null;
           return (
             <div key={i} className={`leading-tight ${isChat ? 'pl-1 border-l-2 border-blue-500/40' : ''}`}>
               {player && <span className={`font-semibold ${colorClass}`}>{player.name}: </span>}
-              <span className="text-gray-300">{entry.message}</span>
+              {isDistribute && resourceStr ? (
+                <span className="text-gray-300">received {resourceStr}</span>
+              ) : (
+                <span className="text-gray-300">{entry.message}</span>
+              )}
             </div>
           );
         })}

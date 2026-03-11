@@ -15,8 +15,8 @@ export interface GameWaitingRoomProps {
     name: string;
     hostId: string;
     players: LobbyPlayerView[];
+    spectators?: { id: string; name: string }[];
     config: {
-      maxPlayers: number;
       victoryPoints: number;
       mapType: string;
       turnTimerSeconds: number;
@@ -28,6 +28,7 @@ export interface GameWaitingRoomProps {
   onRemoveBot: (botId: string) => void;
   onKick: (playerId: string) => void;
   onStartGame: () => void;
+  onUpdateConfig: (updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }) => void;
 }
 
 const PLAYER_COLORS = [
@@ -55,14 +56,17 @@ export function GameWaitingRoom({
   onRemoveBot,
   onKick,
   onStartGame,
+  onUpdateConfig,
 }: GameWaitingRoomProps) {
   const { t } = useTranslation();
   const [botStrategy, setBotStrategy] = useState('random');
 
   const isHost = myPlayerId === lobby.hostId;
   const me = lobby.players.find((p) => p.id === myPlayerId);
+  const spectators = lobby.spectators ?? [];
+  const isSpectator = spectators.some((s) => s.id === myPlayerId);
   const allReady = lobby.players.length >= 2 && lobby.players.every((p) => p.ready);
-  const emptySlots = lobby.config.maxPlayers - lobby.players.length;
+  const canAddMore = lobby.players.length < 8;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
@@ -70,7 +74,7 @@ export function GameWaitingRoom({
       <div className="border-b border-gray-700 px-4 py-4 sm:px-6">
         <h1 className="text-2xl font-bold">{lobby.name}</h1>
         <p className="text-sm text-gray-400 mt-1">
-          {lobby.players.length}/{lobby.config.maxPlayers} {t('common.players')}
+          {lobby.players.length} {t('common.players')}{spectators.length > 0 ? ` · ${spectators.length} ${t('lobby.spectators')}` : ''}
         </p>
       </div>
 
@@ -143,26 +147,23 @@ export function GameWaitingRoom({
             </div>
           ))}
 
-          {/* Empty slots */}
-          {Array.from({ length: emptySlots }).map((_, idx) => (
-            <div
-              key={`empty-${idx}`}
-              className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-3 border border-dashed border-gray-700"
-            >
-              <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-gray-500">
-                ?
-              </div>
-              <span className="flex-1 text-gray-500 italic">{t('lobby.slot.empty')}</span>
-              {isHost && (
-                <button
-                  onClick={() => onAddBot(botStrategy)}
-                  className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+          {/* Spectators */}
+          {spectators.length > 0 && (
+            <>
+              <h2 className="text-lg font-semibold mt-6 mb-3">{t('lobby.spectators')}</h2>
+              {spectators.map((spec) => (
+                <div
+                  key={spec.id}
+                  className="flex items-center gap-3 bg-gray-800/50 rounded-lg p-3"
                 >
-                  🤖 {t('lobby.slot.addBot')}
-                </button>
-              )}
-            </div>
-          ))}
+                  <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-gray-300 font-bold">
+                    👁
+                  </div>
+                  <span className="flex-1 text-gray-400">{spec.name}</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
 
         {/* Settings panel + actions */}
@@ -171,27 +172,61 @@ export function GameWaitingRoom({
           <div className="bg-gray-800 rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-sm text-gray-300 uppercase tracking-wider">{t('common.settings')}</h3>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">{t('lobby.mapType')}</span>
-                <span>{t(`map.${lobby.config.mapType}`)}</span>
+              <div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">{t('lobby.mapType')}</span>
+                  {!isHost && <span>{t(`map.${lobby.config.mapType}`)}</span>}
+                </div>
+                {isHost ? (
+                  <select
+                    value={lobby.config.mapType}
+                    onChange={(e) => onUpdateConfig({ mapType: e.target.value })}
+                    className="w-full mt-1 bg-gray-700 text-white rounded px-2 py-1 text-sm border border-gray-600"
+                  >
+                    {['standard','random','pangaea','archipelago','rich_coast','desert_ring'].map(m => (
+                      <option key={m} value={m}>{t(`map.${m.replace('_','')}` as never) || m}</option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">{t('lobby.victoryPoints')}</span>
-                <span>{lobby.config.victoryPoints}</span>
+              <div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">{t('lobby.victoryPoints')}</span>
+                  <span className="font-bold">{lobby.config.victoryPoints}</span>
+                </div>
+                {isHost && (
+                  <input
+                    type="range"
+                    min={5}
+                    max={20}
+                    value={lobby.config.victoryPoints}
+                    onChange={(e) => onUpdateConfig({ victoryPoints: Number(e.target.value) })}
+                    className="w-full mt-1 accent-blue-500"
+                  />
+                )}
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">{t('lobby.maxPlayers')}</span>
-                <span>{lobby.config.maxPlayers}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Timer</span>
-                <span>{lobby.config.turnTimerSeconds}s</span>
+              <div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">{t('lobby.turnTimer')}</span>
+                  <span className="font-bold">{lobby.config.turnTimerSeconds}s</span>
+                </div>
+                {isHost && (
+                  <select
+                    value={lobby.config.turnTimerSeconds}
+                    onChange={(e) => onUpdateConfig({ turnTimerSeconds: Number(e.target.value) })}
+                    className="w-full mt-1 bg-gray-700 text-white rounded px-2 py-1 text-sm border border-gray-600"
+                  >
+                    {[30, 60, 90, 120, 180, 300].map((s) => (
+                      <option key={s} value={s}>{s}s</option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>
 
           {/* Bot strategy selector for host */}
-          {isHost && emptySlots > 0 && (
+          {isHost && canAddMore && (
             <div className="bg-gray-800 rounded-lg p-4 space-y-2">
               <h3 className="font-semibold text-sm text-gray-300 uppercase tracking-wider">
                 {t('lobby.addBot')}
@@ -205,6 +240,12 @@ export function GameWaitingRoom({
                   <option key={s.value} value={s.value}>{t(s.labelKey)}</option>
                 ))}
               </select>
+              <button
+                onClick={() => onAddBot(botStrategy)}
+                className="w-full px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                🤖 {t('lobby.addBot')}
+              </button>
             </div>
           )}
 
@@ -243,6 +284,10 @@ export function GameWaitingRoom({
             >
               {me.ready ? t('lobby.ready') + ' ✓' : t('lobby.notReady')}
             </button>
+          ) : isSpectator ? (
+            <div className="w-full py-3 rounded-lg text-center text-gray-400 bg-gray-800">
+              👁 {t('lobby.spectating')}
+            </div>
           ) : null}
         </div>
       </div>

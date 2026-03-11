@@ -1,4 +1,11 @@
 import type { GameState } from '@brolonist/shared';
+import { calculateLongestRoad } from '@brolonist/shared';
+
+// Import free roads tracking from gameHandler
+let _getFreeRoads: ((gameId: string) => number) | null = null;
+export function registerFreeRoadsGetter(fn: (gameId: string) => number): void {
+  _getFreeRoads = fn;
+}
 
 /**
  * Filter game state per player — hide secret info (other players' resources,
@@ -8,6 +15,9 @@ export function filterStateForPlayer(state: GameState, playerId: string): unknow
   const filtered = JSON.parse(JSON.stringify(state, mapReplacer));
 
   for (const player of filtered.players) {
+    // Compute and attach longest road length for each player
+    player.longestRoadLength = calculateLongestRoad(state, player.id);
+
     if (player.id !== playerId) {
       const totalResources = Object.values(player.resources as Record<string, number>)
         .reduce((a: number, b: number) => a + b, 0);
@@ -22,6 +32,11 @@ export function filterStateForPlayer(state: GameState, playerId: string): unknow
   // Hide development deck contents but expose count
   filtered.deckSize = state.developmentDeck.length;
   filtered.developmentDeck = [];
+
+  // Expose free roads remaining from Road Building card
+  if (_getFreeRoads) {
+    filtered.freeRoadsRemaining = _getFreeRoads(state.id);
+  }
 
   return filtered;
 }

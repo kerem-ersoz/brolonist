@@ -13,6 +13,12 @@ import {
   type Building,
 } from '@brolonist/shared';
 
+interface GhostPlacement {
+  type: 'road' | 'settlement' | 'city';
+  location: { hex: HexCoord; direction: string };
+  color: string;
+}
+
 interface BoardProps {
   board: BoardType;
   robberPosition: HexCoord;
@@ -21,15 +27,19 @@ interface BoardProps {
   validSettlements?: Array<{ hex: HexCoord; direction: VertexDirection }>;
   validRoads?: Array<{ hex: HexCoord; direction: EdgeDirection }>;
   validRobberHexes?: Array<HexCoord>;
+  ghost?: GhostPlacement | null;
+  buildPhaseActive?: boolean;
   onVertexClick?: (vertex: { hex: HexCoord; direction: VertexDirection }) => void;
   onEdgeClick?: (edge: { hex: HexCoord; direction: EdgeDirection }) => void;
   onHexClick?: (hex: HexCoord) => void;
+  onBackgroundClick?: () => void;
 }
 
 export function Board({
   board, robberPosition, players, size = 50,
   validSettlements = [], validRoads = [], validRobberHexes = [],
-  onVertexClick, onEdgeClick, onHexClick,
+  ghost, buildPhaseActive,
+  onVertexClick, onEdgeClick, onHexClick, onBackgroundClick,
 }: BoardProps) {
   const viewBox = useMemo(() => {
     if (!board?.hexes?.length) return '-300 -300 600 600';
@@ -112,6 +122,25 @@ export function Board({
   const isValidRobberHex = (q: number, r: number) =>
     validRobberHexes.some(h => h.q === q && h.r === r);
 
+  const getVertexGhost = (q: number, r: number, dir: VertexDirection) => {
+    if (!ghost) return null;
+    if (ghost.type !== 'settlement' && ghost.type !== 'city') return null;
+    const loc = ghost.location;
+    if (loc.hex.q === q && loc.hex.r === r && loc.direction === dir) {
+      return { type: ghost.type, color: ghost.color };
+    }
+    return null;
+  };
+
+  const getEdgeGhost = (q: number, r: number, dir: EdgeDirection) => {
+    if (!ghost || ghost.type !== 'road') return null;
+    const loc = ghost.location;
+    if (loc.hex.q === q && loc.hex.r === r && loc.direction === dir) {
+      return { color: ghost.color };
+    }
+    return null;
+  };
+
   const vertexDirs = [VertexDirection.N, VertexDirection.S] as const;
   const edgeDirs = [EdgeDirection.NE, EdgeDirection.E, EdgeDirection.SE] as const;
 
@@ -129,6 +158,7 @@ export function Board({
       className="w-full h-full"
       preserveAspectRatio="xMidYMid meet"
       style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' }}
+      onClick={(e) => { if (e.target === e.currentTarget && onBackgroundClick) onBackgroundClick(); }}
     >
       {/* Water hexes */}
       {board.waterHexes?.map((h, i) => (
@@ -145,7 +175,13 @@ export function Board({
           size={size}
           hasRobber={hex.coord.q === robberPosition.q && hex.coord.r === robberPosition.r}
           highlighted={isValidRobberHex(hex.coord.q, hex.coord.r)}
-          onClick={isValidRobberHex(hex.coord.q, hex.coord.r) ? () => onHexClick?.(hex.coord) : undefined}
+          onClick={
+            isValidRobberHex(hex.coord.q, hex.coord.r)
+              ? () => onHexClick?.(hex.coord)
+              : ghost
+                ? () => onBackgroundClick?.()
+                : undefined
+          }
         />
       ))}
 
@@ -159,14 +195,17 @@ export function Board({
         edgeDirs.map(dir => {
           const building = getEdgeBuilding(hex.coord.q, hex.coord.r, dir);
           const valid = isValidRoad(hex.coord.q, hex.coord.r, dir);
-          if (!building && !valid) return null;
+          const edgeGhost = getEdgeGhost(hex.coord.q, hex.coord.r, dir);
+          const edgeClickable = valid || edgeGhost || buildPhaseActive;
+          if (!building && !edgeClickable) return null;
           return (
             <Edge
               key={`e${hex.coord.q},${hex.coord.r},${dir}`}
               hex={hex.coord} direction={dir} size={size}
               building={building}
-              validPlacement={valid}
-              onClick={valid ? () => onEdgeClick?.({ hex: hex.coord, direction: dir }) : undefined}
+              validPlacement={valid && !edgeGhost}
+              ghost={edgeGhost}
+              onClick={edgeClickable ? () => onEdgeClick?.({ hex: hex.coord, direction: dir }) : undefined}
             />
           );
         })
@@ -177,14 +216,17 @@ export function Board({
         vertexDirs.map(dir => {
           const building = getVertexBuilding(hex.coord.q, hex.coord.r, dir);
           const valid = isValidSettlement(hex.coord.q, hex.coord.r, dir);
-          if (!building && !valid) return null;
+          const vertGhost = getVertexGhost(hex.coord.q, hex.coord.r, dir);
+          const vertClickable = valid || vertGhost || buildPhaseActive;
+          if (!building && !vertClickable) return null;
           return (
             <Vertex
               key={`v${hex.coord.q},${hex.coord.r},${dir}`}
               hex={hex.coord} direction={dir} size={size}
               building={building}
-              validPlacement={valid}
-              onClick={valid ? () => onVertexClick?.({ hex: hex.coord, direction: dir }) : undefined}
+              validPlacement={valid && !vertGhost}
+              ghost={vertGhost}
+              onClick={vertClickable ? () => onVertexClick?.({ hex: hex.coord, direction: dir }) : undefined}
             />
           );
         })

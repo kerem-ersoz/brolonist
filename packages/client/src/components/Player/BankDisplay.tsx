@@ -31,7 +31,7 @@ export function BankDisplay({ deckSize, players }: BankDisplayProps) {
   }
 
   return (
-    <div className="flex items-center justify-center gap-1.5 px-2 py-2 bg-gray-800/60 border-y border-gray-700/50">
+    <div data-bank-display className="flex items-center justify-center gap-1.5 px-2 py-2 bg-gray-800/60 border-y border-gray-700/50">
       {/* Dev card stack */}
       <div className="flex flex-col items-center">
         <div className="w-9 h-12 rounded bg-purple-900 border border-purple-500/40 flex items-center justify-center shadow-sm">

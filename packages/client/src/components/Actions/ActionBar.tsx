@@ -36,19 +36,6 @@ export function ActionBar({
           🎲 {t('game.rollDice')}
         </button>
       )}
-      {canBuild && (
-        <>
-          <button onClick={() => onBuild('road')} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">
-            🛣️ {t('buildings.road')}
-          </button>
-          <button onClick={() => onBuild('settlement')} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">
-            🏠 {t('buildings.settlement')}
-          </button>
-          <button onClick={() => onBuild('city')} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">
-            🏙️ {t('buildings.city')}
-          </button>
-        </>
-      )}
       {canBuyDevCard && (
         <button onClick={onBuyDevCard} className="px-3 py-2 bg-purple-700 hover:bg-purple-600 text-white rounded-lg text-sm">
           📜 {t('game.buyDevCard')}

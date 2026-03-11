@@ -1,6 +1,10 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import { registerAuth } from './auth/session.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
@@ -35,6 +39,17 @@ await app.register(healthRoutes);
 await app.register(authRoutes);
 await app.register(lobbyRoutes);
 await app.register(profileRoutes);
+
+// Serve static client build in production
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const clientDist = join(__dirname, '..', '..', 'client', 'dist');
+if (process.env.NODE_ENV === 'production' && existsSync(clientDist)) {
+  await app.register(fastifyStatic, { root: clientDist, prefix: '/' });
+  // SPA fallback — serve index.html for unmatched routes
+  app.setNotFoundHandler((_req, reply) => {
+    reply.sendFile('index.html');
+  });
+}
 
 const port = Number(process.env.PORT) || 8080;
 const host = process.env.HOST || '0.0.0.0';

@@ -12,7 +12,6 @@ export async function lobbyRoutes(app: FastifyInstance) {
         name: g.name,
         host: g.hostName,
         playerCount: g.players.length,
-        maxPlayers: g.config.maxPlayers,
         mapType: g.config.mapType,
         isPrivate: g.config.isPrivate,
       }));
@@ -21,16 +20,12 @@ export async function lobbyRoutes(app: FastifyInstance) {
 
   // Create game
   app.post<{
-    Body: { name: string; maxPlayers?: number; victoryPoints?: number; mapType?: string; isPrivate?: boolean }
+    Body: { isPrivate?: boolean }
   }>('/api/games', { preHandler: [authGuard] }, async (request, _reply) => {
     const user = request.user as { sub: string; name: string };
-    const { name, maxPlayers, victoryPoints, mapType, isPrivate } = request.body;
+    const { isPrivate } = request.body;
 
     const game = createLobbyGame(user.sub, user.name, {
-      name,
-      maxPlayers,
-      victoryPoints,
-      mapType,
       isPrivate,
     });
     return game;

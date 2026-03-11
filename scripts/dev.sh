@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -15,6 +15,15 @@ ln -sf ../../.env packages/server/.env 2>/dev/null || true
 
 # Source env vars so child processes inherit them
 set -a; source .env; set +a
+
+# Kill any orphaned processes from previous runs
+echo "🧹 Cleaning up stale processes..."
+for port in ${PORT:-8080} 5173 5174 5175; do
+  kill -9 $(lsof -ti:$port) 2>/dev/null || true
+done
+pkill -9 -f "tsx watch.*packages/server" 2>/dev/null || true
+pkill -9 -f "vite.*packages/client" 2>/dev/null || true
+sleep 1
 
 echo "🐳 Starting Docker services (PostgreSQL + Redis)..."
 docker compose up -d
@@ -75,9 +84,21 @@ echo "Press Ctrl+C to stop all services."
 cleanup() {
   echo ""
   echo "🛑 Shutting down..."
-  kill $SERVER_PID $CLIENT_PID 2>/dev/null
-  wait $SERVER_PID $CLIENT_PID 2>/dev/null
+  # Kill the npm parent processes
+  kill $SERVER_PID $CLIENT_PID 2>/dev/null || true
+  sleep 0.5
+  # Kill tsx/vite child processes directly
+  pkill -9 -f "tsx watch.*packages/server" 2>/dev/null || true
+  pkill -9 -f "vite.*packages/client" 2>/dev/null || true
+  # Force-kill anything still on our ports
+  for port in ${PORT:-8080} ${CLIENT_PORT:-5173} 5174; do
+    kill -9 $(lsof -ti:$port) 2>/dev/null || true
+  done
+  # Don't wait — processes are already killed
   echo "Stopped."
+  exit 0
 }
-trap cleanup EXIT INT TERM
-wait
+trap cleanup INT TERM
+
+# Keep script alive while both background jobs run
+wait $SERVER_PID $CLIENT_PID 2>/dev/null || true

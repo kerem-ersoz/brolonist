@@ -47,7 +47,8 @@ interface GameStateView {
   longestRoadHolder: string | null;
   largestArmyHolder: string | null;
   deckSize?: number;
-  log: Array<{ timestamp: string; playerId?: string; type: string; message: string }>;
+  freeRoadsRemaining?: number;
+  log: Array<{ timestamp: string; playerId?: string; type: string; message: string; data?: Record<string, unknown> }>;
 }
 
 interface GameResult {

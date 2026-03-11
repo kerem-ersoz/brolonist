@@ -10,6 +10,7 @@ interface SidebarPlayer {
   developmentCards: unknown[];
   hasLongestRoad: boolean;
   hasLargestArmy: boolean;
+  longestRoadLength?: number;
   roadsBuilt: number;
   settlementsBuilt: number;
   citiesBuilt: number;
@@ -56,7 +57,7 @@ const RESOURCE_ORDER = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
 
 export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: SidebarPlayerListProps) {
   return (
-    <div className="flex flex-col gap-1.5 overflow-y-auto px-2 py-2 min-h-0">
+    <div className="flex flex-col gap-1.5 px-2 py-2">
       {players.map((p) => {
         const isCurrentTurn = p.id === currentPlayerId;
         const isMe = p.id === myPlayerId;
@@ -70,6 +71,7 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
         return (
           <div
             key={p.id}
+            data-player-id={p.id}
             className={`rounded-lg p-2 ${
               isCurrentTurn ? 'ring-2 ring-yellow-400 bg-gray-800' : 'bg-gray-800/60'
             } ${p.status === 'quit' ? 'opacity-40' : ''}`}
@@ -103,11 +105,13 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
 
             {/* Stats row */}
             <div className="flex items-center gap-2 mt-1.5 pl-10">
-              {/* Cards count */}
-              <div className="flex items-center gap-0.5" title="Total resource cards">
-                <span className="text-[10px]">🃏</span>
-                <span className="text-[10px] text-gray-300 font-medium">{totalCards}</span>
-              </div>
+              {/* Cards count — opponents only */}
+              {!isMe && (
+                <div className="flex items-center gap-0.5" title="Total resource cards">
+                  <span className="text-[10px]">🃏</span>
+                  <span className="text-[10px] text-gray-300 font-medium">{totalCards}</span>
+                </div>
+              )}
 
               {/* Dev cards */}
               <div className="flex items-center gap-0.5" title="Development cards">
@@ -119,6 +123,12 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
               <div className="flex items-center gap-0.5" title="Knights played">
                 <span className="text-[10px]">⚔️</span>
                 <span className="text-[10px] text-gray-300 font-medium">{p.knightsPlayed}</span>
+              </div>
+
+              {/* Longest road length */}
+              <div className="flex items-center gap-0.5" title="Longest road">
+                <span className="text-[10px]">🛤️</span>
+                <span className="text-[10px] text-gray-300 font-medium">{p.longestRoadLength ?? 0}</span>
               </div>
 
               {/* Pieces remaining */}
@@ -135,18 +145,6 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
                 <span className="text-[10px] text-gray-300">{4 - p.citiesBuilt}</span>
               </div>
             </div>
-
-            {/* Resource breakdown — only shown for self */}
-            {isMe && (
-              <div className="flex items-center gap-1.5 mt-1 pl-10">
-                {RESOURCE_ORDER.map((r) => (
-                  <div key={r} className="flex items-center gap-0.5" title={r}>
-                    <span className="text-[10px]">{RESOURCE_ICONS[r].icon}</span>
-                    <span className="text-[10px] text-gray-300 font-medium">{p.resources[r] ?? 0}</span>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* Achievement badges */}
             {(p.hasLongestRoad || p.hasLargestArmy) && (

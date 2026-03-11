@@ -11,9 +11,14 @@ import {
   handleDiscardCards,
   handleTradeOffer,
   handleTradeRespond,
+  handleTradeConfirm,
+  handleTradeCancel,
   handleTradeWithBank,
   handleEndTurn,
   handlePassSpecialBuild,
+  handleDevGiveResources,
+  handleDevGiveDevCard,
+  handleDevRollSeven,
   getGame,
   initializeGame,
   scheduleBotTurn,
@@ -28,6 +33,7 @@ import {
   addBotToLobby,
   removeBotFromLobby,
   canStartGame,
+  updateLobbyConfig,
 } from '../lobby/lobbyStore.js';
 import type { GameConfig } from '@brolonist/shared';
 
@@ -80,6 +86,9 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
     case 'start_game':
       handleStartGameFromLobby(playerId);
       break;
+    case 'update_config':
+      handleUpdateConfig(playerId, msg.payload as { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string });
+      break;
     // Game actions — delegated to gameHandler
     case 'roll_dice':
       handleRollDice(playerId, getGameId(playerId));
@@ -111,6 +120,12 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
     case 'trade_respond':
       handleTradeRespond(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeRespond>[2]);
       break;
+    case 'trade_confirm':
+      handleTradeConfirm(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeConfirm>[2]);
+      break;
+    case 'trade_cancel':
+      handleTradeCancel(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeCancel>[2]);
+      break;
     case 'trade_with_bank':
       handleTradeWithBank(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleTradeWithBank>[2]);
       break;
@@ -119,6 +134,16 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
       break;
     case 'pass_special_build':
       handlePassSpecialBuild(playerId, getGameId(playerId));
+      break;
+    // Dev/debug actions (dev mode only)
+    case 'dev_give_resources':
+      handleDevGiveResources(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleDevGiveResources>[2]);
+      break;
+    case 'dev_give_devcard':
+      handleDevGiveDevCard(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleDevGiveDevCard>[2]);
+      break;
+    case 'dev_roll_seven':
+      handleDevRollSeven(playerId, getGameId(playerId));
       break;
     default:
       hub.send(playerId, 'error', { code: 'UNKNOWN_TYPE', message: `Unknown message type: ${msg.type}` });
@@ -220,6 +245,18 @@ function handleKickPlayer(playerId: string, payload: { targetId: string }): void
   broadcastLobbyState(client.gameId);
 }
 
+function handleUpdateConfig(playerId: string, payload: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }): void {
+  const client = hub.getClient(playerId);
+  if (!client?.gameId) return;
+  const lobby = getLobbyGame(client.gameId);
+  if (!lobby || lobby.hostId !== playerId) {
+    hub.send(playerId, 'error', { code: 'NOT_HOST', message: 'Only the host can change settings' });
+    return;
+  }
+  updateLobbyConfig(client.gameId, payload);
+  broadcastLobbyState(client.gameId);
+}
+
 function handleStartGameFromLobby(playerId: string): void {
   const client = hub.getClient(playerId);
   if (!client?.gameId) return;
@@ -249,7 +286,7 @@ function handleStartGameFromLobby(playerId: string): void {
   }));
 
   const config: GameConfig = {
-    maxPlayers: lobby.config.maxPlayers,
+    maxPlayers: lobby.players.length,
     victoryPoints: lobby.config.victoryPoints,
     mapType: lobby.config.mapType as GameConfig['mapType'],
     turnTimerSeconds: lobby.config.turnTimerSeconds,

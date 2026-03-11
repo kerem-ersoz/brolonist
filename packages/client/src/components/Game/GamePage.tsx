@@ -160,6 +160,33 @@ export function GamePage() {
 
   const currentLobby = useLobbyStore((s) => s.currentLobby);
 
+  // These hooks must be before any early returns (Rules of Hooks)
+  const incomingOffers = useMemo(() => {
+    if (!gameState) return [];
+    return (gameState.activeTradeOffers as Array<{ id: string; fromPlayerId: string; offering: Record<string, number>; requesting: Record<string, number> }>)
+      .filter(o => o.fromPlayerId !== myPlayerId)
+      .map(o => {
+        const playerNameMap: Record<string, { name: string; color: string }> = {};
+        for (const p of gameState.players) playerNameMap[p.id] = { name: p.name, color: p.color };
+        return {
+          id: o.id,
+          fromPlayerName: playerNameMap[o.fromPlayerId]?.name ?? 'Unknown',
+          fromPlayerColor: playerNameMap[o.fromPlayerId]?.color ?? 'gray',
+          offering: o.offering,
+          requesting: o.requesting,
+        };
+      });
+  }, [gameState, myPlayerId]);
+
+  const handleCounterOffer = useCallback((offer: { offering: Record<string, number>; requesting: Record<string, number> }) => {
+    setCounterPrefillGive(offer.requesting);
+    setCounterPrefillGet(offer.offering);
+    setTradePreselect(null);
+    setTradeModalOpen(true);
+  }, []);
+
+  // --- Early returns (no hooks below this point) ---
+
   // Game over screen
   if (gameResult) {
     return (
@@ -225,27 +252,6 @@ export function GamePage() {
   } else if (!myTurn && phase !== 'game_over') {
     phaseHint = `⏳ Waiting for ${currentPlayer?.name || 'opponent'}...`;
   }
-
-  // Incoming trade offers for this player (from other players)
-  const incomingOffers = useMemo(() => {
-    return (gameState.activeTradeOffers as Array<{ id: string; fromPlayerId: string; offering: Record<string, number>; requesting: Record<string, number> }>)
-      .filter(o => o.fromPlayerId !== myPlayerId)
-      .map(o => ({
-        id: o.id,
-        fromPlayerName: playerNames[o.fromPlayerId]?.name ?? 'Unknown',
-        fromPlayerColor: playerNames[o.fromPlayerId]?.color ?? 'gray',
-        offering: o.offering,
-        requesting: o.requesting,
-      }));
-  }, [gameState.activeTradeOffers, myPlayerId, playerNames]);
-
-  const handleCounterOffer = useCallback((offer: { offering: Record<string, number>; requesting: Record<string, number> }) => {
-    // Counter: swap give/get and open modal
-    setCounterPrefillGive(offer.requesting);
-    setCounterPrefillGet(offer.offering);
-    setTradePreselect(null);
-    setTradeModalOpen(true);
-  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-gray-900">

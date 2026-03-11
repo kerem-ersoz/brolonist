@@ -1,12 +1,17 @@
 import { useState } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../hooks/useAuth';
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Already logged in — redirect to lobby
+  if (isAuthenticated) return <Navigate to="/" />;
 
   const handleGuestLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,6 +19,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(name.trim());
+      navigate('/');
     } finally {
       setLoading(false);
     }

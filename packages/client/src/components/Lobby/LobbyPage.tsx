@@ -14,11 +14,17 @@ export function LobbyPage() {
   const [gameName, setGameName] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(4);
   const [mapType, setMapType] = useState('standard');
+  const [victoryPoints, setVictoryPoints] = useState(10);
 
   useEffect(() => { fetchGames(); }, [fetchGames]);
 
+  // Auto-adjust default VP when player count changes
+  useEffect(() => {
+    setVictoryPoints(maxPlayers <= 4 ? 10 : maxPlayers <= 6 ? 12 : 14);
+  }, [maxPlayers]);
+
   const handleCreate = async () => {
-    const gameId = await createGame(gameName || `${user?.name}'s Game`, { maxPlayers, mapType });
+    const gameId = await createGame(gameName || `${user?.name}'s Game`, { maxPlayers, mapType, victoryPoints });
     navigate(`/game/${gameId}`);
   };
 
@@ -63,6 +69,20 @@ export function LobbyPage() {
                     <option key={m} value={m}>{t(`map.${m.replace('_','')}` as never) || m}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-gray-400 text-sm">{t('lobby.victoryPoints')}</label>
+              <div className="flex items-center gap-3 mt-1">
+                <input
+                  type="range"
+                  min={5}
+                  max={20}
+                  value={victoryPoints}
+                  onChange={(e) => setVictoryPoints(Number(e.target.value))}
+                  className="flex-1 accent-blue-500"
+                />
+                <span className="text-white font-bold text-lg w-8 text-center">{victoryPoints}</span>
               </div>
             </div>
             <button onClick={handleCreate} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg">

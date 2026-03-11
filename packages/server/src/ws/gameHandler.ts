@@ -954,7 +954,12 @@ export function handleDevGiveDevCard(
     turnPurchased: state.turnNumber,
   });
   addLogEntry(state, { type: 'chat', message: `[DEV] Gave self ${payload.cardType}`, playerId });
-  broadcastState(gameId, state);
+
+  for (const p of state.players) {
+    p.victoryPoints = calculateVictoryPoints(state, p.id);
+  }
+
+  broadcastAndCheckVictory(gameId, state);
 }
 
 // ---------------------------------------------------------------------------

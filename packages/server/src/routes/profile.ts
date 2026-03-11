@@ -19,12 +19,12 @@ export async function profileRoutes(app: FastifyInstance) {
     if (!profile) return { user: null, stats: null };
     
     const totalGames = profile.games.length;
-    const wins = profile.games.filter(g => g.game.winnerId === user.sub).length;
+    const wins = profile.games.filter((g) => g.game.winnerId === user.sub).length;
     
     return {
       user: { id: profile.id, name: profile.displayName, avatar: profile.avatarUrl },
       stats: { totalGames, wins, winRate: totalGames > 0 ? (wins / totalGames * 100).toFixed(1) : '0' },
-      recentGames: profile.games.map(g => ({
+      recentGames: profile.games.map((g) => ({
         gameId: g.gameId,
         date: g.game.createdAt,
         result: g.game.winnerId === user.sub ? 'win' : g.quit ? 'quit' : 'loss',

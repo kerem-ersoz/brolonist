@@ -41,12 +41,23 @@ export function calculateVictoryPoints(state: GameState, playerId: string): numb
   return vp;
 }
 
-/** Check if the current player has won. Returns winner ID or null. */
+/** Check if any player has won. Returns winner ID or null. */
 export function checkVictoryCondition(state: GameState): string | null {
-  const current = getCurrentPlayer(state);
-  const vp = calculateVictoryPoints(state, current.id);
   const target = state.config.victoryPoints || getTargetVP(state.players.length);
-  return vp >= target ? current.id : null;
+
+  // First check the current player (they have priority per Catan rules)
+  const current = getCurrentPlayer(state);
+  const currentVp = calculateVictoryPoints(state, current.id);
+  if (currentVp >= target) return current.id;
+
+  // Also check all other players (e.g. VP cards accumulated)
+  for (const player of state.players) {
+    if (player.id === current.id) continue;
+    const vp = calculateVictoryPoints(state, player.id);
+    if (vp >= target) return player.id;
+  }
+
+  return null;
 }
 
 /** Update largest army holder. Minimum 3 knights to qualify. Mutates state. */

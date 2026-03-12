@@ -52,7 +52,8 @@ export const useLobbyStore = create<LobbyStore>((set) => ({
   fetchGames: async () => {
     set({ loading: true });
     try {
-      const res = await fetch('/api/games');
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${apiBase}/api/games`);
       const games = await res.json();
       set({ games, loading: false });
     } catch {
@@ -62,7 +63,8 @@ export const useLobbyStore = create<LobbyStore>((set) => ({
 
   createGame: async () => {
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/games', {
+    const apiBase = import.meta.env.VITE_API_URL || '';
+    const res = await fetch(`${apiBase}/api/games`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

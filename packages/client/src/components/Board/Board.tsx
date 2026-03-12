@@ -163,6 +163,14 @@ export function Board({
       style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' }}
       onClick={(e) => { if (e.target === e.currentTarget && onBackgroundClick) onBackgroundClick(); }}
     >
+      <defs>
+        <filter id="building-shadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.7" />
+        </filter>
+        <filter id="road-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#000" floodOpacity="0.8" />
+        </filter>
+      </defs>
       {/* Water hexes */}
       {board.waterHexes?.map((h, i) => (
         <HexTile key={`w${i}`} q={h.q} r={h.r} terrain="water" numberToken={null} size={size} />

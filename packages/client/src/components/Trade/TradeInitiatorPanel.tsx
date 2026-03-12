@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { assetPath } from '../../utils/sprites';
 
 function useCountdown(expiresAt?: number): number {
   const [secondsLeft, setSecondsLeft] = useState(() =>
@@ -15,23 +16,21 @@ function useCountdown(expiresAt?: number): number {
   return secondsLeft;
 }
 
-const RESOURCE_ICONS: Record<string, string> = {
-  brick: '🧱',
-  lumber: '🪵',
-  ore: '⛏️',
-  grain: '🌾',
-  wool: '🐑',
+const RESOURCE_CARD_SPRITES: Record<string, string> = {
+  brick: assetPath('assets/sprites/card-brick.png'),
+  lumber: assetPath('assets/sprites/card-wood.png'),
+  ore: assetPath('assets/sprites/card-ore.png'),
+  grain: assetPath('assets/sprites/card-grain.png'),
+  wool: assetPath('assets/sprites/card-sheep.png'),
+};
+
+const RESOURCE_EMOJI: Record<string, string> = {
+  brick: '🧱', lumber: '🪵', ore: '⛏️', grain: '🌾', wool: '🐑',
 };
 
 const PLAYER_COLORS: Record<string, string> = {
-  red: '#ef4444',
-  blue: '#3b82f6',
-  white: '#d1d5db',
-  orange: '#f97316',
-  green: '#22c55e',
-  brown: '#92400e',
-  purple: '#a855f7',
-  teal: '#14b8a6',
+  red: '#ef4444', blue: '#3b82f6', white: '#d1d5db', orange: '#f97316',
+  green: '#22c55e', brown: '#92400e', purple: '#a855f7', teal: '#14b8a6',
 };
 
 interface PlayerInfo {
@@ -57,11 +56,26 @@ interface TradeInitiatorPanelProps {
   onCancel: (offerId: string) => void;
 }
 
-function formatResources(resources: Record<string, number>): string {
-  return Object.entries(resources)
-    .filter(([, v]) => v > 0)
-    .map(([k, v]) => `${RESOURCE_ICONS[k]}×${v}`)
-    .join(' ');
+function ResourceCards({ resources }: { resources: Record<string, number> }) {
+  return (
+    <div className="flex gap-1 items-center">
+      {Object.entries(resources).filter(([, v]) => v > 0).map(([res, count]) => (
+        <div key={res} className="relative w-6 h-8">
+          <img
+            src={RESOURCE_CARD_SPRITES[res]}
+            alt={res}
+            className="w-full h-full object-contain rounded-sm"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+          {count > 1 && (
+            <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-[8px] font-bold min-w-[14px] h-[14px] rounded-full flex items-center justify-center border border-gray-600">
+              {count}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: TradeInitiatorPanelProps) {
@@ -88,21 +102,16 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
         </div>
       </div>
 
-      {/* Offer summary */}
-      <div className="text-xs text-gray-400 mb-3 space-y-0.5">
-        <div>
-          <span className="text-green-300 font-semibold">{t('trade.give')}:</span>{' '}
-          <span className="text-white">{formatResources(offer.offering)}</span>
-        </div>
-        <div>
-          <span className="text-red-300 font-semibold">{t('trade.want')}:</span>{' '}
-          <span className="text-white">
-            {offer.openToOffers && !Object.values(offer.requesting).some(v => v > 0)
-              ? `❓ ${t('trade.openToOffers', 'Open to offers')}`
-              : formatResources(offer.requesting)}
-            {offer.openToOffers && Object.values(offer.requesting).some(v => v > 0) && ' + ❓'}
-          </span>
-        </div>
+      {/* Offer summary with card sprites */}
+      <div className="flex items-center gap-2 mb-3 text-xs">
+        <span className="text-green-300 font-semibold">{t('trade.give')}:</span>
+        <ResourceCards resources={offer.offering} />
+        <span className="text-gray-500 mx-1">→</span>
+        <span className="text-red-300 font-semibold">{t('trade.want')}:</span>
+        {offer.openToOffers && !Object.values(offer.requesting).some(v => v > 0)
+          ? <span className="text-yellow-300">❓</span>
+          : <ResourceCards resources={offer.requesting} />}
+        {offer.openToOffers && Object.values(offer.requesting).some(v => v > 0) && <span className="text-yellow-300">+ ❓</span>}
       </div>
 
       {/* Player avatars with response status */}
@@ -147,8 +156,9 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
                 <span className="text-[10px] text-red-400">❌</span>
               )}
               {countered && counter && (
-                <div className="text-[9px] text-yellow-300 text-center">
-                  🔄 {formatResources(counter.offering)}
+                <div className="flex items-center gap-0.5">
+                  <span className="text-yellow-400 text-[10px]">🔄</span>
+                  <ResourceCards resources={counter.offering} />
                 </div>
               )}
 
@@ -156,9 +166,9 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
               {accepted && (
                 <button
                   onClick={() => onConfirm(offer.id, player.id)}
-                  className="px-2 py-1 rounded text-[10px] font-bold bg-green-600 hover:bg-green-500 text-white transition-colors"
+                  className="w-7 h-7 rounded-full text-sm font-bold bg-green-600 hover:bg-green-500 text-white transition-colors flex items-center justify-center"
                 >
-                  ✓ {t('trade.confirm', 'Trade')}
+                  ✓
                 </button>
               )}
             </div>

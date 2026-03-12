@@ -3,6 +3,7 @@ import { useState, useCallback, useMemo, useEffect, useRef, Component, type Reac
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Board as BoardType, HexCoord, VertexDirection, EdgeDirection } from '@brolonist/shared';
+import { BUILDING_COSTS, BuildingType, hasResources, type Resources } from '@brolonist/shared';
 import { useGameStore } from '../../store/gameStore';
 import { useLobbyStore } from '../../store/lobbyStore';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -177,9 +178,20 @@ function GamePageInner() {
         }
       }
 
+      // Dev card purchase animation — card flies to player's hand
+      if (entry.type === 'buy_dev_card' && entry.playerId === myPlayerId) {
+        newItems.push({
+          kind: 'distribute',
+          id: `${entry.timestamp}-devcard`,
+          playerId: myPlayerId,
+          resources: { devcard: 1 },
+          isMe: true,
+        });
+      }
+
       // Monopoly animations — cards fly from each victim to the monopoly player
       if (entry.type === 'monopoly' && entry.data && entry.playerId) {
-        const monopolist = entry.playerId;
+        const monopolist: string = entry.playerId;
         const resourceType = entry.data.resourceType as string;
         const perPlayer = entry.data.perPlayer as Record<string, number>;
         if (monopolist === myPlayerId || (perPlayer && Object.keys(perPlayer).includes(myPlayerId))) {
@@ -264,9 +276,22 @@ function GamePageInner() {
   const validSettlements = useMemo(() => {
     if (!gameState || !myPlayerId) return [];
 
+    const me = gameState.players.find(p => p.id === myPlayerId);
+    const myRes = me?.resources as unknown as Resources | undefined;
+
     // Setup or explicit settlement mode or general build phase (for hover ghosts)
     if (effectiveBuildMode === 'settlement' || (canBuild && !effectiveBuildMode)) {
+      // During normal build: check if player can afford a settlement
+      if (!isSetup && myRes && !hasResources(myRes, BUILDING_COSTS[BuildingType.Settlement])) return [];
+
       const board = gameState.board as BoardType;
+      const buildings = board.vertexBuildings instanceof Map
+        ? Object.fromEntries(board.vertexBuildings)
+        : (board.vertexBuildings || {}) as Record<string, { type: string; playerId: string }>;
+      const roads = board.edgeBuildings instanceof Map
+        ? Object.fromEntries(board.edgeBuildings)
+        : (board.edgeBuildings || {}) as Record<string, { type: string; playerId: string }>;
+
       // Build set of terrain hex keys for adjacency check
       const terrainSet = new Set(board.hexes.map(h => `${h.coord.q},${h.coord.r}`));
       const allCoords = [
@@ -275,18 +300,37 @@ function GamePageInner() {
       ];
       const seen = new Set<string>();
       const verts: Array<{ hex: HexCoord; direction: VertexDirection }> = [];
+
+      // Helper: get adjacent vertex keys for distance rule
+      const adjVertexKeys = (q: number, r: number, dir: string): string[] => {
+        if (dir === 'N') return [`${q},${r - 1},S`, `${q + 1},${r - 1},S`, `${q},${r},S`];
+        return [`${q},${r + 1},N`, `${q - 1},${r + 1},N`, `${q},${r},N`];
+      };
+      // Helper: get adjacent edge keys for connectivity
+      const adjEdgeKeys = (q: number, r: number, dir: string): string[] => {
+        if (dir === 'N') return [`${q},${r},NE`, `${q},${r - 1},SE`, `${q},${r - 1},E`];
+        return [`${q},${r},SE`, `${q - 1},${r + 1},NE`, `${q - 1},${r},E`];
+      };
+
       for (const coord of allCoords) {
         for (const dir of ['N', 'S'] as VertexDirection[]) {
           const key = `${coord.q},${coord.r},${dir}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          // Check that at least one adjacent hex is terrain
+          // Must be on land
           const adjHexes = dir === 'N'
             ? [{ q: coord.q, r: coord.r }, { q: coord.q, r: coord.r - 1 }, { q: coord.q + 1, r: coord.r - 1 }]
             : [{ q: coord.q, r: coord.r }, { q: coord.q, r: coord.r + 1 }, { q: coord.q - 1, r: coord.r + 1 }];
-          if (adjHexes.some(h => terrainSet.has(`${h.q},${h.r}`))) {
-            verts.push({ hex: coord, direction: dir });
+          if (!adjHexes.some(h => terrainSet.has(`${h.q},${h.r}`))) continue;
+          // Must be empty
+          if (buildings[key]) continue;
+          // Distance rule: no adjacent buildings
+          if (adjVertexKeys(coord.q, coord.r, dir).some(k => buildings[k])) continue;
+          // During non-setup: must be connected to player's road
+          if (!isSetup) {
+            if (!adjEdgeKeys(coord.q, coord.r, dir).some(k => roads[k]?.playerId === myPlayerId)) continue;
           }
+          verts.push({ hex: coord, direction: dir });
         }
       }
       return verts;
@@ -294,6 +338,8 @@ function GamePageInner() {
 
     // Legacy: explicit city build mode
     if (effectiveBuildMode === 'city') {
+      // Check resources
+      if (myRes && !hasResources(myRes, BUILDING_COSTS[BuildingType.City])) return [];
       const board = gameState.board as BoardType;
       const buildings = board.vertexBuildings;
       const verts: Array<{ hex: HexCoord; direction: VertexDirection }> = [];
@@ -316,12 +362,53 @@ function GamePageInner() {
     }
 
     return [];
-  }, [gameState, myPlayerId, effectiveBuildMode, canBuild]);
+  }, [gameState, myPlayerId, effectiveBuildMode, canBuild, isSetup]);
 
   const validRoads = useMemo(() => {
     if (!gameState || !myPlayerId) return [];
     if (effectiveBuildMode === 'road' || (canBuild && !effectiveBuildMode)) {
+      const me = gameState.players.find(p => p.id === myPlayerId);
+      const myRes = me?.resources as unknown as Resources | undefined;
+      const isFree = freeRoadsRemaining > 0;
+
+      // Check resources (unless free from Road Building card or setup)
+      if (!isSetup && !isFree && myRes && !hasResources(myRes, BUILDING_COSTS[BuildingType.Road])) return [];
+
       const board = gameState.board as BoardType;
+      const buildings = board.vertexBuildings instanceof Map
+        ? Object.fromEntries(board.vertexBuildings)
+        : (board.vertexBuildings || {}) as Record<string, { type: string; playerId: string }>;
+      const roads = board.edgeBuildings instanceof Map
+        ? Object.fromEntries(board.edgeBuildings)
+        : (board.edgeBuildings || {}) as Record<string, { type: string; playerId: string }>;
+      const terrainSet = new Set(board.hexes.map(h => `${h.coord.q},${h.coord.r}`));
+
+      // Edge → two adjacent hexes
+      const edgeAdjHexes = (q: number, r: number, dir: string): [string, string] => {
+        switch (dir) {
+          case 'NE': return [`${q},${r}`, `${q + 1},${r - 1}`];
+          case 'E': return [`${q},${r}`, `${q + 1},${r}`];
+          case 'SE': return [`${q},${r}`, `${q},${r + 1}`];
+          default: return [`${q},${r}`, `${q},${r}`];
+        }
+      };
+      // Edge → two endpoint vertex keys
+      const edgeEndpoints = (q: number, r: number, dir: string): [string, string] => {
+        switch (dir) {
+          case 'NE': return [`${q},${r},N`, `${q + 1},${r - 1},S`];
+          case 'E': return [`${q + 1},${r - 1},S`, `${q},${r + 1},N`];
+          case 'SE': return [`${q},${r + 1},N`, `${q},${r},S`];
+          default: return [`${q},${r},N`, `${q},${r},S`];
+        }
+      };
+      // Vertex → adjacent edge keys
+      const vertexAdjEdgeKeys = (vKey: string): string[] => {
+        const [qs, rs, dir] = vKey.split(',');
+        const q = parseInt(qs), r = parseInt(rs);
+        if (dir === 'N') return [`${q},${r},NE`, `${q},${r - 1},SE`, `${q},${r - 1},E`];
+        return [`${q},${r},SE`, `${q - 1},${r + 1},NE`, `${q - 1},${r},E`];
+      };
+
       const allCoords = [
         ...board.hexes.map(h => h.coord),
         ...(board.waterHexes || []),
@@ -329,13 +416,26 @@ function GamePageInner() {
       const edges: Array<{ hex: HexCoord; direction: EdgeDirection }> = [];
       for (const coord of allCoords) {
         for (const dir of ['NE', 'E', 'SE'] as EdgeDirection[]) {
+          const eKey = `${coord.q},${coord.r},${dir}`;
+          // Already occupied
+          if (roads[eKey]) continue;
+          // Must border at least one land hex
+          const [h1, h2] = edgeAdjHexes(coord.q, coord.r, dir);
+          if (!terrainSet.has(h1) && !terrainSet.has(h2)) continue;
+          // Must be connected to player's network (building or road at endpoint)
+          const [v1, v2] = edgeEndpoints(coord.q, coord.r, dir);
+          const connected = [v1, v2].some(vk => {
+            if (buildings[vk]?.playerId === myPlayerId) return true;
+            return vertexAdjEdgeKeys(vk).some(ek => ek !== eKey && roads[ek]?.playerId === myPlayerId);
+          });
+          if (!connected) continue;
           edges.push({ hex: coord, direction: dir });
         }
       }
       return edges;
     }
     return [];
-  }, [gameState, myPlayerId, effectiveBuildMode, canBuild]);
+  }, [gameState, myPlayerId, effectiveBuildMode, canBuild, freeRoadsRemaining, isSetup]);
 
   const validRobberHexes = useMemo(() => {
     if (!gameState || effectiveBuildMode !== 'robber') return [];
@@ -619,17 +719,12 @@ function GamePageInner() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col relative overflow-hidden">
       <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
 
-      {/* Phase hint banner */}
-      {phaseHint && (
-        <div className={`text-white text-center py-2 text-sm font-semibold ${myTurn ? 'bg-yellow-600 animate-pulse' : 'bg-gray-700'}`}>
-          {phaseHint}
-        </div>
-      )}
-
       <GameLayout
+        phaseHint={phaseHint}
+        isMyTurn={myTurn}
         board={
           <Board
             board={gameState.board as BoardType}
@@ -830,7 +925,7 @@ function GamePageInner() {
       {import.meta.env.DEV && <DevPanel sendMessage={sendMessage} players={gameState?.players.map(p => ({ id: p.id, name: p.name, color: p.color }))} myPlayerId={myPlayerId ?? undefined} />}
 
       {/* Steal victim picker */}
-      {gameState && myTurn && (gameState.pendingStealTargets as string[] | undefined)?.length && (
+      {gameState && myTurn && ((gameState.pendingStealTargets as string[] | undefined)?.length ?? 0) > 0 && (
         <StealPicker
           targets={(gameState.pendingStealTargets as string[]).map(id => {
             const p = gameState.players.find(pl => pl.id === id);

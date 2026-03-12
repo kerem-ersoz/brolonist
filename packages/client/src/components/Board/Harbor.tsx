@@ -6,12 +6,12 @@ const HARBOR_LABELS: Record<string, string> = {
   grain: '2:1', wool: '2:1',
 };
 
-const HARBOR_RESOURCE_SPRITES: Record<string, string> = {
-  brick: 'pip-brick',
-  lumber: 'pip-wood',
-  ore: 'pip-ore',
-  grain: 'pip-grain',
-  wool: 'pip-sheep',
+const HARBOR_RESOURCE_ICONS: Record<string, string> = {
+  brick: 'icon-brick.png',
+  lumber: 'icon-wood.png',
+  ore: 'icon-ore.png',
+  grain: 'icon-grain.png',
+  wool: 'icon-sheep.png',
 };
 
 interface HarborProps {
@@ -38,7 +38,10 @@ export function Harbor({ position, vertices, type, size }: HarborProps) {
   const harborX = edgeMidX + (toWaterX / dist) * offsetDist;
   const harborY = edgeMidY + (toWaterY / dist) * offsetDist;
 
-  const resourceSprite = HARBOR_RESOURCE_SPRITES[type];
+  const resourceIcon = HARBOR_RESOURCE_ICONS[type];
+  const is21 = !!resourceIcon;
+  const boxW = is21 ? size * 0.65 : size * 0.6;
+  const boxH = is21 ? size * 0.55 : size * 0.3;
 
   return (
     <g>
@@ -64,28 +67,35 @@ export function Harbor({ position, vertices, type, size }: HarborProps) {
         width={size * 0.8}
         height={size * 0.8}
       />
+
+      {/* Label container */}
       <rect
-        x={harborX - size * 0.3}
-        y={harborY - size * 0.15}
-        width={size * 0.6}
-        height={size * 0.3}
-        fill="rgba(255,255,255,0.8)"
+        x={harborX - boxW / 2}
+        y={harborY - boxH / 2}
+        width={boxW}
+        height={boxH}
+        fill="rgba(255,255,255,0.85)"
         rx={size * 0.05}
       />
+
+      {/* Ratio text — centered if generic, above icon if specialized */}
       <text
-        x={harborX + (resourceSprite ? -size * 0.1 : 0)} y={harborY}
+        x={harborX}
+        y={is21 ? harborY - boxH * 0.18 : harborY}
         textAnchor="middle" dominantBaseline="central"
         fontSize={size * 0.2} fill="#333" fontWeight="bold" fontFamily="Display, sans-serif"
       >
         {HARBOR_LABELS[type] || '3:1'}
       </text>
-      {resourceSprite && (
+
+      {/* Resource icon below the numbers for 2:1 harbors */}
+      {resourceIcon && (
         <image
-          href={`/assets/sprites/${resourceSprite}.svg`}
-          x={harborX + size * 0.05}
-          y={harborY - size * 0.12}
-          width={size * 0.24}
-          height={size * 0.24}
+          href={assetPath(`assets/sprites/${resourceIcon}`)}
+          x={harborX - size * 0.3}
+          y={harborY - size * 0.05}
+          width={size * 0.6}
+          height={size * 0.6}
         />
       )}
     </g>

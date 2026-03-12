@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { vertexToPixel, edgeAdjacentVertices, type EdgeDirection } from '@brolonist/shared';
+import { assetPath } from '../../utils/sprites';
 
 const PLAYER_COLORS: Record<string, string> = {
   red: '#e53935', blue: '#1e88e5', white: '#eeeeee', orange: '#fb8c00',
@@ -36,9 +37,9 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, ho
     const displayLength = length * 0.8;
 
     return (
-      <g pointerEvents="none">
+      <g pointerEvents="none" filter="url(#road-glow)">
         <image
-          href={`/assets/sprites/road-${building.color}.png`}
+          href={assetPath(`assets/sprites/road-${building.color}.png`)}
           x={mx - displayLength / 2}
           y={my - length / 2}
           width={displayLength}
@@ -67,7 +68,7 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, ho
           strokeLinecap="round"
         />
         <image
-          href={`/assets/sprites/road-${ghost.color}.png`}
+          href={assetPath(`assets/sprites/road-${ghost.color}.png`)}
           x={mx - length / 2}
           y={my - length / 2}
           width={length}
@@ -97,7 +98,7 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, ho
         />
         {hovered && hoverGhostColor ? (
           <image
-            href={`/assets/sprites/road-${hoverGhostColor}.png`}
+            href={assetPath(`assets/sprites/road-${hoverGhostColor}.png`)}
             x={mx - length / 2}
             y={my - length / 2}
             width={length}

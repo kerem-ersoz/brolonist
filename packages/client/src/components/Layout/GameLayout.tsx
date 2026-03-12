@@ -7,17 +7,28 @@ interface GameLayoutProps {
   tradeOffers?: ReactNode;
   dice?: ReactNode;
   endTurnButton?: ReactNode;
+  phaseHint?: string;
+  isMyTurn?: boolean;
 }
 
-export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton }: GameLayoutProps) {
+export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton, phaseHint, isMyTurn }: GameLayoutProps) {
   return (
-    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0">
       {/* Main area */}
       <div className="flex-1 flex flex-col min-h-0 relative lg:mr-80">
-        {/* Board */}
+        {/* Phase hint — floating pill (always reserves vertical space) */}
+        <div className="flex-shrink-0 flex justify-center py-1.5 pointer-events-none" style={{ minHeight: 40 }}>
+          {phaseHint ? (
+            <div className={`px-5 py-2 rounded-full text-white text-sm font-semibold shadow-lg backdrop-blur-sm ${
+              isMyTurn ? 'bg-yellow-600/90 animate-pulse' : 'bg-gray-700/90'
+            }`}>
+              {phaseHint}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Board — fills all available space */}
         <div className="flex-1 min-h-0 p-2">{board}</div>
-        {/* Spacer so the hand doesn't cover the board */}
-        <div className="h-[95px] flex-shrink-0" />
 
         {/* Dice + End turn — stacked vertically, bottom-right, above everything */}
         {(dice || endTurnButton) && (

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { vertexToPixel, type VertexDirection } from '@brolonist/shared';
+import { assetPath } from '../../utils/sprites';
 
 const PLAYER_COLORS: Record<string, string> = {
   red: '#e53935', blue: '#1e88e5', white: '#eeeeee', orange: '#fb8c00',
@@ -28,13 +29,13 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
     const color = PLAYER_COLORS[building.color] || '#999';
     if (building.type === 'city') {
       return (
-        <g pointerEvents="none">
+        <g pointerEvents="none" filter="url(#building-shadow)">
           <image
-            href={`/assets/sprites/city-${building.color}.png`}
-            x={pos.x - r * 3.375}
-            y={pos.y - r * 3.375}
-            width={r * 6.75}
-            height={r * 6.75}
+            href={assetPath(`assets/sprites/city-${building.color}.png`)}
+            x={pos.x - r * 4}
+            y={pos.y - r * 4}
+            width={r * 8}
+            height={r * 8}
           />
         </g>
       );
@@ -44,16 +45,16 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
       const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
       return (
         <g className="cursor-pointer" onClick={onClick}>
-          <image href={`/assets/sprites/settlement-${building.color}.png`} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} />
-          <image href={`/assets/sprites/city-${ghost.color}.png`} x={pos.x - r * 3.375} y={pos.y - r * 3.375} width={r * 6.75} height={r * 6.75} opacity={0.5} className="animate-pulse" />
+          <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} />
+          <image href={assetPath(`assets/sprites/city-${ghost.color}.png`)} x={pos.x - r * 3.375} y={pos.y - r * 3.375} width={r * 6.75} height={r * 6.75} opacity={0.5} className="animate-pulse" />
         </g>
       );
     }
     // Existing settlement — clickable for city upgrade during build phase
     return (
-      <g className={onClick ? 'cursor-pointer' : undefined} onClick={onClick} pointerEvents={onClick ? undefined : 'none'}>
+      <g className={onClick ? 'cursor-pointer' : undefined} onClick={onClick} pointerEvents={onClick ? undefined : 'none'} filter="url(#building-shadow)">
         {onClick && <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />}
-        <image href={`/assets/sprites/settlement-${building.color}.png`} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} />
+        <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 4.2} y={pos.y - r * 4.2} width={r * 8.4} height={r * 8.4} />
       </g>
     );
   }
@@ -65,7 +66,7 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
       <g className="cursor-pointer" onClick={onClick}>
         <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
         <image
-          href={`/assets/sprites/settlement-${ghost.color}.png`}
+          href={assetPath(`assets/sprites/settlement-${ghost.color}.png`)}
           x={pos.x - r * 3.6}
           y={pos.y - r * 3.6}
           width={r * 7.2}
@@ -84,7 +85,7 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
         <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
         {hovered && hoverGhostColor ? (
           <image
-            href={`/assets/sprites/settlement-${hoverGhostColor}.png`}
+            href={assetPath(`assets/sprites/settlement-${hoverGhostColor}.png`)}
             x={pos.x - r * 3.6}
             y={pos.y - r * 3.6}
             width={r * 7.2}

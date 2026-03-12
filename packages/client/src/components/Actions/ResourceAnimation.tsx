@@ -33,6 +33,7 @@ const RESOURCE_COLORS: Record<string, string> = {
   ore: '#6b6b6b',
   grain: '#d4a832',
   wool: '#7bc67b',
+  devcard: '#6b21a8',
 };
 
 const RESOURCE_CARD_SPRITES: Record<string, string> = {
@@ -41,6 +42,7 @@ const RESOURCE_CARD_SPRITES: Record<string, string> = {
   ore: assetPath('assets/sprites/card-ore.png'),
   grain: assetPath('assets/sprites/card-grain.png'),
   wool: assetPath('assets/sprites/card-sheep.png'),
+  devcard: assetPath('assets/sprites/dev-card-back.png'),
 };
 
 interface FlyingCard {
@@ -222,7 +224,7 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
     const cleanupTimer = setTimeout(() => {
       setCards((prev) => prev.filter((c) => !allNewCards.some((nc) => nc.id === c.id)));
       for (const item of items) onComplete(item.id);
-    }, maxDelay + 2400); // 2200ms for the slide animation duration + buffer
+    }, maxDelay + 1290); // fire onComplete 300ms before animation visually ends
 
     return () => {
       cancelAnimationFrame(animateTimer);
@@ -245,8 +247,7 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
               height: 58,
               left: card.animating ? card.endX - 20 : card.startX - 20,
               top: card.animating ? card.endY - 29 : card.startY - 29,
-              transition: `left 2200ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, top 2200ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, opacity 0ms ease ${card.delay + 2200}ms`,
-              opacity: card.animating ? 0 : 1,
+              transition: `left 1540ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, top 1540ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms`,
               zIndex: 60,
             }}
           >

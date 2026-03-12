@@ -11,12 +11,9 @@ interface PlayerPanelProps {
   victoryPoints: number;
 }
 
-const RESOURCE_ICONS = {
-  wood: '🌲',
-  brick: '🧱',
-  sheep: '🐑',
-  grain: '🌾',
-  ore: '⛰️'
+const RESOURCES = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
+const RESOURCE_EMOJI: Record<string, string> = {
+  brick: '🧱', lumber: '🪵', ore: '⛏️', grain: '🌾', wool: '🐑',
 };
 
 export function PlayerPanel({ resources, developmentCards, roadsBuilt, settlementsBuilt, citiesBuilt, victoryPoints }: PlayerPanelProps) {
@@ -29,11 +26,22 @@ export function PlayerPanel({ resources, developmentCards, roadsBuilt, settlemen
       </div>
       {/* Resources */}
       <div className="flex gap-2 flex-wrap">
-                                                                      <d                                            ap-1                                                             ma                                                    sNa                         one"                                   of                                           4                   
-                          e="te                     co                      </div>                      iv>           Dev c               {d               .l             (
-             class ame             class ame             class ame             class ame             class ame             class ame             class ame      t             class ame                      `d             class ame             class ame            
-                                                       }
-                                                                               e="flex items-center gap-1"><SpriteImag                                           /span>} className="w-3 h-3 object-contain" /> {15 - roadsBuilt}</span>
+        {RESOURCES.map((r) => (
+          <div key={r} className="flex items-center gap-1">
+            <SpriteImage src={RESOURCE_SPRITES[r]} fallback={<span>{RESOURCE_EMOJI[r]}</span>} className="w-4 h-4 object-contain" />
+            <span className="text-white text-sm">{resources[r] ?? 0}</span>
+          </div>
+        ))}
+      </div>
+      {/* Dev cards */}
+      {developmentCards.length > 0 && (
+        <div className="text-gray-400 text-xs">
+          Dev cards: {developmentCards.length}
+        </div>
+      )}
+      {/* Building inventory */}
+      <div className="flex gap-3 text-xs text-gray-300">
+        <span className="flex items-center gap-1"><SpriteImage src={ICONS.road} fallback={<span>🛣️</span>} className="w-3 h-3 object-contain" /> {15 - roadsBuilt}</span>
         <span className="flex items-center gap-1"><SpriteImage src={ICONS.settlement} fallback={<span>🏠</span>} className="w-3 h-3 object-contain" /> {5 - settlementsBuilt}</span>
         <span className="flex items-center gap-1"><SpriteImage src={ICONS.city} fallback={<span>🏙️</span>} className="w-3 h-3 object-contain" /> {4 - citiesBuilt}</span>
       </div>

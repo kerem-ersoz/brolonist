@@ -35,7 +35,7 @@ jobs:
 
       - name: Build frontend
         env:
-          VITE_API_URL: https://brolonist-server.agreeableground-5fed07de.eastus2.azurecontainerapps.io
+          VITE_API_URL: https://brolonist-server.jollyrock-264fe0af.eastus2.azurecontainerapps.io
           VITE_BASE_PATH: /brolonist/
         run: npm run build -w packages/client
 

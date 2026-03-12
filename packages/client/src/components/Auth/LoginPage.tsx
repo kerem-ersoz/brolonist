@@ -21,14 +21,18 @@ export function LoginPage() {
   const [showMore, setShowMore] = useState(false);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   if (isAuthenticated) return <Navigate to="/" />;
 
   const handlePlayNow = async () => {
     setLoading(true);
+    setError('');
     try {
       await login(generateGuestName());
       navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Connection failed. Is the server running?');
     } finally {
       setLoading(false);
     }
@@ -38,9 +42,12 @@ export function LoginPage() {
     e.preventDefault();
     if (!name.trim()) return;
     setLoading(true);
+    setError('');
     try {
       await login(name.trim());
       navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Connection failed. Is the server running?');
     } finally {
       setLoading(false);
     }
@@ -100,6 +107,12 @@ export function LoginPage() {
             >
               {loading ? '⏳' : '🎮'} {t('auth.guest')}
             </button>
+
+            {error && (
+              <div className="text-red-400 text-sm text-center bg-red-900/20 border border-red-800/30 rounded-lg px-3 py-2">
+                {error}
+              </div>
+            )}
 
             {/* Custom name option */}
             <form onSubmit={handleGuestLogin} className="flex gap-2">

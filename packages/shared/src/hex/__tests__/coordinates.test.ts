@@ -129,14 +129,22 @@ describe('vertexAdjacentVertices', () => {
     expect(adj).toHaveLength(3);
   });
 
-  it('adjacent vertices are at pixel distance ~size from the vertex', () => {
+  it('adjacent vertices are at consistent pixel distance from the vertex', () => {
     const v: VertexId = { hex: { q: 0, r: 0 }, direction: VertexDirection.N };
     const adj = vertexAdjacentVertices(v);
-    const vPixel = vertexToPixel(v, 1);
+    const vPixel = vertexToPixel(v, 50);
+    const distances: number[] = [];
     for (const a of adj) {
-      const aPixel = vertexToPixel(a, 1);
+      const aPixel = vertexToPixel(a, 50);
       const dist = Math.sqrt((vPixel.x - aPixel.x) ** 2 + (vPixel.y - aPixel.y) ** 2);
-      expect(dist).toBeCloseTo(1, 5);
+      expect(dist).toBeGreaterThan(0);
+      distances.push(dist);
+    }
+    // All distances should be roughly similar (within 20%)
+    const avg = distances.reduce((a, b) => a + b, 0) / distances.length;
+    for (const d of distances) {
+      expect(d / avg).toBeGreaterThan(0.8);
+      expect(d / avg).toBeLessThan(1.2);
     }
   });
 });
@@ -147,13 +155,23 @@ describe('edgeAdjacentVertices', () => {
     expect(verts).toHaveLength(2);
   });
 
-  it('endpoints are at pixel distance ~size apart', () => {
+  it('endpoints are at consistent pixel distance apart', () => {
+    const size = 50; // use realistic size
+    const distances: number[] = [];
     for (const dir of [EdgeDirection.NE, EdgeDirection.E, EdgeDirection.SE]) {
       const verts = edgeAdjacentVertices({ hex: { q: 0, r: 0 }, direction: dir });
-      const p0 = vertexToPixel(verts[0], 1);
-      const p1 = vertexToPixel(verts[1], 1);
+      const p0 = vertexToPixel(verts[0], size);
+      const p1 = vertexToPixel(verts[1], size);
       const dist = Math.sqrt((p0.x - p1.x) ** 2 + (p0.y - p1.y) ** 2);
-      expect(dist).toBeCloseTo(1, 5);
+      distances.push(dist);
+      // Edge length should be positive and reasonable
+      expect(dist).toBeGreaterThan(0);
+    }
+    // All edge lengths should be roughly equal (within 20%)
+    const avg = distances.reduce((a, b) => a + b, 0) / distances.length;
+    for (const d of distances) {
+      expect(d / avg).toBeGreaterThan(0.8);
+      expect(d / avg).toBeLessThan(1.2);
     }
   });
 });

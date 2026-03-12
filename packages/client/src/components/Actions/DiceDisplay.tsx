@@ -1,3 +1,5 @@
+import { assetPath } from '../../utils/sprites';
+
 interface DiceDisplayProps {
   dice: [number, number] | null;
   rolling?: boolean;
@@ -10,7 +12,7 @@ const DICE_SIZE = 120;
 function DieImage({ value, opacity, className }: { value: number; opacity?: number; className?: string }) {
   return (
     <img
-      src={`/assets/sprites/dice-${value}.png`}
+      src={assetPath(`assets/sprites/dice-${value}.png`)}
       alt={`Dice ${value}`}
       style={{ width: DICE_SIZE, height: DICE_SIZE, opacity: opacity ?? 1 }}
       className={`select-none pointer-events-none ${className ?? ''}`}

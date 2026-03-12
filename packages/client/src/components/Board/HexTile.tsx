@@ -79,7 +79,7 @@ export function HexTile({ q, r, terrain, numberToken, size, hasRobber, onClick, 
         opacity={highlighted ? 0.9 : 1}
       />
       <image
-        href={`/assets/sprites/${spriteFile}`}
+        href={assetPath(`assets/sprites/${spriteFile}`)}
         x={center.x - imageSize / 2}
         y={center.y - imageSize / 2}
         width={imageSize}

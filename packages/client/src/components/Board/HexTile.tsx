@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { useState, useEffect } from 'react';
 import { axialToPixel, hexCorners } from '@brolonist/shared';
 
@@ -106,7 +107,7 @@ export function HexTile({ q, r, terrain, numberToken, size, hasRobber, onClick, 
           {/* Programmatic Fallback Circle */}
           <circle cx={center.x} cy={center.y} r={size * 0.4} fill="#f5f0dc" stroke="#333" strokeWidth={1} />
           <image
-            href="/assets/sprites/number-tile.png"
+            href={assetPath('assets/sprites/number-tile.png')}
             x={center.x - size * 0.528}
             y={center.y - size * 0.528}
             width={size * 1.056}
@@ -147,7 +148,7 @@ export function HexTile({ q, r, terrain, numberToken, size, hasRobber, onClick, 
       )}
       {highlighted && hovered && (
         <image
-          href="/assets/sprites/robber.png"
+          href={assetPath('assets/sprites/robber.png')}
           x={center.x - size * 0.525}
           y={center.y - size * 0.675}
           width={size * 1.05}

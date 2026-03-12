@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { useEffect, useState, useCallback } from 'react';
 
 export interface DistributeAnimationItem {
@@ -35,11 +36,11 @@ const RESOURCE_COLORS: Record<string, string> = {
 };
 
 const RESOURCE_CARD_SPRITES: Record<string, string> = {
-  brick: '/assets/sprites/card-brick.png',
-  lumber: '/assets/sprites/card-wood.png',
-  ore: '/assets/sprites/card-ore.png',
-  grain: '/assets/sprites/card-grain.png',
-  wool: '/assets/sprites/card-sheep.png',
+  brick: assetPath('assets/sprites/card-brick.png'),
+  lumber: assetPath('assets/sprites/card-wood.png'),
+  ore: assetPath('assets/sprites/card-ore.png'),
+  grain: assetPath('assets/sprites/card-grain.png'),
+  wool: assetPath('assets/sprites/card-sheep.png'),
 };
 
 interface FlyingCard {

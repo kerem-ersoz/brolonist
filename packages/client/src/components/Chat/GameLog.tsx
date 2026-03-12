@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { useRef, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -21,11 +22,11 @@ const COLOR_MAP: Record<string, string> = {
 };
 
 const RESOURCE_SPRITES: Record<string, string> = {
-  brick: '/assets/sprites/card-brick.png',
-  lumber: '/assets/sprites/card-wood.png',
-  ore: '/assets/sprites/card-ore.png',
-  grain: '/assets/sprites/card-grain.png',
-  wool: '/assets/sprites/card-sheep.png',
+  brick: assetPath('assets/sprites/card-brick.png'),
+  lumber: assetPath('assets/sprites/card-wood.png'),
+  ore: assetPath('assets/sprites/card-ore.png'),
+  grain: assetPath('assets/sprites/card-grain.png'),
+  wool: assetPath('assets/sprites/card-sheep.png'),
 };
 
 const RESOURCE_TOKEN: Record<string, string> = {

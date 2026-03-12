@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { axialToPixel, vertexToPixel, type VertexId } from '@brolonist/shared';
 
 const HARBOR_LABELS: Record<string, string> = {
@@ -57,7 +58,7 @@ export function Harbor({ position, vertices, type, size }: HarborProps) {
       {/* Harbor body */}
       <circle cx={harborX} cy={harborY} r={size * 0.25} fill="#2a4858" stroke="#4a90d9" strokeWidth={1} />
       <image
-        href="/assets/sprites/harbor.svg"
+        href={assetPath('assets/sprites/harbor.svg')}
         x={harborX - size * 0.4}
         y={harborY - size * 0.4}
         width={size * 0.8}

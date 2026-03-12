@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { axialToPixel } from '@brolonist/shared';
 
 interface RobberProps {
@@ -12,7 +13,7 @@ export function Robber({ hex, size, draggable }: RobberProps) {
   return (
     <g className={draggable ? 'cursor-grab' : ''}>
       <image
-        href="/assets/sprites/robber.png"
+        href={assetPath('assets/sprites/robber.png')}
         x={pos.x - size * 0.525}
         y={pos.y - size * 0.675}
         width={size * 1.05}

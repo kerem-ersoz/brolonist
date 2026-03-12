@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -40,27 +41,27 @@ const RESOURCE_ICONS: Record<string, string> = {
 };
 
 const RESOURCE_SPRITES: Record<string, string> = {
-  brick: '/assets/sprites/pip-brick.svg',
-  lumber: '/assets/sprites/pip-wood.svg',
-  ore: '/assets/sprites/pip-ore.svg',
-  grain: '/assets/sprites/pip-grain.svg',
-  wool: '/assets/sprites/pip-sheep.svg',
+  brick: assetPath('assets/sprites/pip-brick.svg'),
+  lumber: assetPath('assets/sprites/pip-wood.svg'),
+  ore: assetPath('assets/sprites/pip-ore.svg'),
+  grain: assetPath('assets/sprites/pip-grain.svg'),
+  wool: assetPath('assets/sprites/pip-sheep.svg'),
 };
 
 const RESOURCE_CARD_SPRITES: Record<string, string> = {
-  brick: '/assets/sprites/card-brick.png',
-  lumber: '/assets/sprites/card-wood.png',
-  ore: '/assets/sprites/card-ore.png',
-  grain: '/assets/sprites/card-grain.png',
-  wool: '/assets/sprites/card-sheep.png',
+  brick: assetPath('assets/sprites/card-brick.png'),
+  lumber: assetPath('assets/sprites/card-wood.png'),
+  ore: assetPath('assets/sprites/card-ore.png'),
+  grain: assetPath('assets/sprites/card-grain.png'),
+  wool: assetPath('assets/sprites/card-sheep.png'),
 };
 
 const DEV_CARD_STYLES: Record<string, { sprite: string; fallback: string; color: string; border: string; label: string }> = {
-  knight: { sprite: '/assets/sprites/dev-knight.png', fallback: '⚔️', color: 'bg-red-900', border: 'border-red-500/50', label: 'Knight' },
-  victory_point: { sprite: '/assets/sprites/dev-vp.png', fallback: '⭐', color: 'bg-yellow-900', border: 'border-yellow-500/50', label: 'VP' },
-  road_building: { sprite: '/assets/sprites/dev-roads.png', fallback: '🛣️', color: 'bg-green-900', border: 'border-green-500/50', label: 'Roads' },
-  year_of_plenty: { sprite: '/assets/sprites/dev-yop.png', fallback: '🎁', color: 'bg-blue-900', border: 'border-blue-500/50', label: 'Plenty' },
-  monopoly: { sprite: '/assets/sprites/dev-mono.png', fallback: '👑', color: 'bg-purple-900', border: 'border-purple-500/50', label: 'Monopoly' },
+  knight: { sprite: assetPath('assets/sprites/dev-knight.png'), fallback: '⚔️', color: 'bg-red-900', border: 'border-red-500/50', label: 'Knight' },
+  victory_point: { sprite: assetPath('assets/sprites/dev-vp.png'), fallback: '⭐', color: 'bg-yellow-900', border: 'border-yellow-500/50', label: 'VP' },
+  road_building: { sprite: assetPath('assets/sprites/dev-roads.png'), fallback: '🛣️', color: 'bg-green-900', border: 'border-green-500/50', label: 'Roads' },
+  year_of_plenty: { sprite: assetPath('assets/sprites/dev-yop.png'), fallback: '🎁', color: 'bg-blue-900', border: 'border-blue-500/50', label: 'Plenty' },
+  monopoly: { sprite: assetPath('assets/sprites/dev-mono.png'), fallback: '👑', color: 'bg-purple-900', border: 'border-purple-500/50', label: 'Monopoly' },
 };
 
 const DEV_CARD_I18N: Record<string, string> = {

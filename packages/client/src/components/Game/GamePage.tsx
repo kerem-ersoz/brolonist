@@ -1,3 +1,4 @@
+import { assetPath } from '../../utils/sprites';
 import { useState, useCallback, useMemo, useEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -690,7 +691,7 @@ function GamePageInner() {
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Build Road"
             >
-              <img src="/assets/sprites/road-white.png" alt="Road" className="w-full h-full object-contain" />
+              <img src={assetPath('assets/sprites/road-white.png')} alt="Road" className="w-full h-full object-contain" />
             </button>
             <button
               onClick={canBuild ? () => setBuildMode(buildMode === 'settlement' ? null : 'settlement') : undefined}
@@ -702,7 +703,7 @@ function GamePageInner() {
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Build Settlement"
             >
-              <img src="/assets/sprites/settlement-white.png" alt="Settlement" className="w-full h-full object-contain" />
+              <img src={assetPath('assets/sprites/settlement-white.png')} alt="Settlement" className="w-full h-full object-contain" />
             </button>
             <button
               onClick={canBuild ? () => setBuildMode(buildMode === 'city' ? null : 'city') : undefined}
@@ -714,7 +715,7 @@ function GamePageInner() {
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Build City"
             >
-              <img src="/assets/sprites/city-white.png" alt="City" className="w-full h-full object-contain" />
+              <img src={assetPath('assets/sprites/city-white.png')} alt="City" className="w-full h-full object-contain" />
             </button>
             <button
               onClick={canBuyDevCard ? handleBuyDevCard : undefined}
@@ -726,9 +727,9 @@ function GamePageInner() {
               title="Buy Dev Card"
             >
               <div className="relative" style={{ width: '52%', height: '52%' }}>
-                <img src="/assets/sprites/dev-card-back.png" alt="" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(-15deg) translateX(-20%)' }} />
-                <img src="/assets/sprites/dev-card-back.png" alt="" className="absolute inset-0 w-full h-full object-contain" />
-                <img src="/assets/sprites/dev-card-back.png" alt="Dev Card" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(15deg) translateX(20%)' }} />
+                <img src={assetPath('assets/sprites/dev-card-back.png')} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(-15deg) translateX(-20%)' }} />
+                <img src={assetPath('assets/sprites/dev-card-back.png')} alt="" className="absolute inset-0 w-full h-full object-contain" />
+                <img src={assetPath('assets/sprites/dev-card-back.png')} alt="Dev Card" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(15deg) translateX(20%)' }} />
               </div>
             </button>
             <button
@@ -740,7 +741,7 @@ function GamePageInner() {
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="End Turn"
             >
-              <img src="/assets/sprites/skip-button.png" alt="End Turn" className="w-full h-full object-contain" />
+              <img src={assetPath('assets/sprites/skip-button.png')} alt="End Turn" className="w-full h-full object-contain" />
             </button>
           </div>
         }

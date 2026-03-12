@@ -44,6 +44,7 @@ interface GameStateView {
   setupAction?: 'settlement' | 'road';
   activeTradeOffers: unknown[];
   pendingDiscards: string[];
+  pendingStealTargets?: string[];
   longestRoadHolder: string | null;
   largestArmyHolder: string | null;
   deckSize?: number;
@@ -51,10 +52,26 @@ interface GameStateView {
   log: Array<{ timestamp: string; playerId?: string; type: string; message: string; data?: Record<string, unknown> }>;
 }
 
+interface PlayerStanding {
+  playerId: string;
+  name: string;
+  color: string;
+  totalVP: number;
+  settlements: number;
+  cities: number;
+  longestRoad: boolean;
+  largestArmy: boolean;
+  vpCards: number;
+  knightsPlayed: number;
+  roadsBuilt: number;
+}
+
 interface GameResult {
   winnerId: string;
   winnerName: string;
+  winnerColor?: string;
   victoryPoints: number;
+  standings?: PlayerStanding[];
 }
 
 interface GameStore {
@@ -108,11 +125,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return gameState.players[gameState.currentPlayerIndex] || null;
   },
 
-  setGameState: (state) => set({ gameState: state, lastError: null }),
+  setGameState: (state) => set((s) => {
+    // If no existing state, just set it directly
+    if (!s.gameState) return { gameState: state, lastError: null };
+    // Merge log: preserve client-only entries (chat messages) that the server doesn't have
+    if (state.log && s.gameState.log) {
+      const serverSet = new Set(state.log.map((e) => `${e.timestamp}|${e.type}|${e.playerId ?? ''}`));
+      const clientOnly = s.gameState.log.filter(
+        (e) => !serverSet.has(`${e.timestamp}|${e.type}|${e.playerId ?? ''}`)
+      );
+      state = { ...state, log: [...state.log, ...clientOnly].sort((a, b) => a.timestamp.localeCompare(b.timestamp)) };
+    }
+    return { gameState: state, lastError: null };
+  }),
 
-  applyDelta: (delta) => set((s) => ({
-    gameState: s.gameState ? { ...s.gameState, ...delta } : null,
-  })),
+  applyDelta: (delta) => set((s) => {
+    if (!s.gameState) return { gameState: null };
+    const merged = { ...s.gameState, ...delta };
+    // Merge log: keep client-only entries (chat, trades) that the server log doesn't have
+    if (delta.log && s.gameState.log) {
+      const serverLog = delta.log;
+      const clientLog = s.gameState.log;
+      // Server log is authoritative for game events; client may have extra entries
+      // (chat, trade_proposed, trade_completed) appended via addLogEntry.
+      // Keep all server entries + any client entries beyond the previous server log length.
+      const prevServerLen = clientLog.findIndex((e) =>
+        e.type === 'chat' || e.type === 'trade_proposed' || e.type === 'trade_completed'
+      );
+      // Simpler approach: server log is the base, append any client-only entries
+      // that aren't in the server log (matched by timestamp + type)
+      const serverSet = new Set(serverLog.map((e) => `${e.timestamp}|${e.type}|${e.playerId ?? ''}`));
+      const clientOnly = clientLog.filter(
+        (e) => !serverSet.has(`${e.timestamp}|${e.type}|${e.playerId ?? ''}`)
+      );
+      merged.log = [...serverLog, ...clientOnly].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    }
+    return { gameState: merged };
+  }),
 
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setMyPlayerId: (myPlayerId) => set({ myPlayerId }),

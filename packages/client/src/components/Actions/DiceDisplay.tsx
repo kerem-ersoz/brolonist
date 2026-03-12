@@ -5,28 +5,38 @@ interface DiceDisplayProps {
   onRoll?: () => void;
 }
 
-const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const DICE_SIZE = 120;
+
+function DieImage({ value, opacity, className }: { value: number; opacity?: number; className?: string }) {
+  return (
+    <img
+      src={`/assets/sprites/dice-${value}.png`}
+      alt={`Dice ${value}`}
+      style={{ width: DICE_SIZE, height: DICE_SIZE, opacity: opacity ?? 1 }}
+      className={`select-none pointer-events-none ${className ?? ''}`}
+      draggable={false}
+    />
+  );
+}
 
 export function DiceDisplay({ dice, rolling, canRoll, onRoll }: DiceDisplayProps) {
-  // Show clickable dice when it's time to roll
   if (canRoll && onRoll) {
     return (
       <button
         onClick={onRoll}
-        className="flex gap-2 items-center justify-center cursor-pointer animate-pulse hover:scale-105 transition-transform rounded-xl bg-white/5 hover:bg-white/10"
-        style={{ width: 300, height: 160 }}
+        className="flex items-center justify-center cursor-pointer animate-pulse hover:scale-105 transition-transform p-1"
       >
-        <span className="text-white opacity-70 select-none" style={{ fontSize: '9rem', lineHeight: 1 }}>⚄</span>
-        <span className="text-white opacity-70 select-none" style={{ fontSize: '9rem', lineHeight: 1 }}>⚂</span>
+        <DieImage value={5} opacity={0.7} />
+        <DieImage value={3} opacity={0.7} className="-ml-8" />
       </button>
     );
   }
 
   if (!dice) return null;
   return (
-    <div className={`flex gap-2 items-center ${rolling ? 'animate-bounce' : ''}`}>
-      <span className="text-white" style={{ fontSize: '9rem', lineHeight: 1 }}>{DICE_FACES[dice[0] - 1]}</span>
-      <span className="text-white" style={{ fontSize: '9rem', lineHeight: 1 }}>{DICE_FACES[dice[1] - 1]}</span>
+    <div className={`flex items-center ${rolling ? 'animate-bounce' : ''}`}>
+      <DieImage value={dice[0]} />
+      <DieImage value={dice[1]} className="-ml-8" />
     </div>
   );
 }

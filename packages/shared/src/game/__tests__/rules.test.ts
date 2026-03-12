@@ -46,6 +46,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
     lastSetupSettlement: null,
     activeTradeOffers: [],
     pendingDiscards: [],
+    pendingStealTargets: [],
     specialBuildOrder: [],
     specialBuildCurrentIndex: 0,
     log: [],

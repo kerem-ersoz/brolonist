@@ -142,11 +142,35 @@ function broadcastAndCheckVictory(gameId: string, state: GameState): void {
     state.currentPhase = GamePhase.GameOver;
     state.status = 'finished';
     const winner = state.players.find((p) => p.id === winnerId);
+
+    // Build full scoreboard with VP breakdown for all players
+    const standings = state.players
+      .map((p) => {
+        const vpCards = p.developmentCards.filter(c => c.type === DevelopmentCardType.VictoryPoint).length;
+        return {
+          playerId: p.id,
+          name: p.name,
+          color: p.color,
+          totalVP: calculateVictoryPoints(state, p.id),
+          settlements: p.settlementsBuilt,
+          cities: p.citiesBuilt,
+          longestRoad: p.hasLongestRoad,
+          largestArmy: p.hasLargestArmy,
+          vpCards,
+          knightsPlayed: p.knightsPlayed,
+          roadsBuilt: p.roadsBuilt,
+        };
+      })
+      .sort((a, b) => b.totalVP - a.totalVP);
+
     hub.broadcast(gameId, 'game_ended', {
       winnerId,
       winnerName: winner?.name ?? 'Unknown',
+      winnerColor: winner?.color ?? 'blue',
       victoryPoints: calculateVictoryPoints(state, winnerId),
+      standings,
     });
+    broadcastState(gameId, state);
   }
 }
 
@@ -225,6 +249,7 @@ export function initializeGame(
     lastSetupSettlement: null,
     activeTradeOffers: [],
     pendingDiscards: [],
+    pendingStealTargets: [],
     specialBuildOrder: [],
     specialBuildCurrentIndex: 0,
     log: [],
@@ -546,8 +571,16 @@ export function handlePlayDevCard(
       const resource2 = payload.params?.resource2 as ResourceType;
       if (!resource1 || !resource2) return sendError(playerId, 'Must specify two resources');
       executeYearOfPlenty(state, playerId, resource1, resource2);
-      addLogEntry(state, { type: 'play_dev_card', message: 'Played Year of Plenty', playerId });
-      // Instant-resolve: restore original phase
+      // Log as distribute so the animation fires (cards from bank to hand)
+      const yopResources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+      yopResources[resource1] = (yopResources[resource1] || 0) + 1;
+      yopResources[resource2] = (yopResources[resource2] || 0) + 1;
+      addLogEntry(state, {
+        type: 'distribute',
+        message: `Year of Plenty: received ${resource1}, ${resource2}`,
+        playerId,
+        data: { resources: yopResources },
+      });
       if (phaseBefore === GamePhase.RollDice) {
         state.currentPhase = GamePhase.RollDice;
       }
@@ -556,13 +589,20 @@ export function handlePlayDevCard(
     case DevelopmentCardType.Monopoly: {
       const resourceType = payload.params?.resourceType as ResourceType;
       if (!resourceType) return sendError(playerId, 'Must specify a resource type');
+      // Capture per-player amounts before monopoly zeroes them
+      const perPlayer: Record<string, number> = {};
+      for (const other of state.players) {
+        if (other.id === playerId) continue;
+        const amount = other.resources[resourceType];
+        if (amount > 0) perPlayer[other.id] = amount;
+      }
       const stolen = executeMonopoly(state, playerId, resourceType);
       addLogEntry(state, {
-        type: 'play_dev_card',
+        type: 'monopoly',
         message: `Played Monopoly on ${resourceType}, took ${stolen}`,
         playerId,
+        data: { resourceType, perPlayer, total: stolen },
       });
-      // Instant-resolve: restore original phase
       if (phaseBefore === GamePhase.RollDice) {
         state.currentPhase = GamePhase.RollDice;
       }
@@ -594,22 +634,67 @@ export function handleMoveRobber(
   executeRobberMove(state, payload.hex);
   addLogEntry(state, { type: 'move_robber', message: 'Robber moved', playerId });
 
-  // Steal from victim if specified
-  if (payload.victimId) {
-    const targets = getStealTargets(state, payload.hex);
-    if (targets.includes(payload.victimId)) {
-      const stolenResource = executeSteal(state, payload.victimId, playerId);
-      if (stolenResource) {
-        addLogEntry(state, {
-          type: 'steal',
-          message: `Stole a resource from ${payload.victimId}`,
-          playerId,
-          data: { victimId: payload.victimId },
-        });
-      }
+  // Get steal targets (other players with buildings adjacent to the new robber hex who have cards)
+  const targets = getStealTargets(state, payload.hex);
+  console.log('[ROBBER] Moved to', payload.hex, 'targets:', targets, 'buildings:', state.board.vertexBuildings.size);
+
+  if (targets.length === 0) {
+    // No one to steal from — proceed
+    finishRobberPhase(gameId, state);
+  } else if (targets.length === 1) {
+    // Only one target — auto-steal
+    const stolenResource = executeSteal(state, targets[0], playerId);
+    if (stolenResource) {
+      const victimName = state.players.find(p => p.id === targets[0])?.name || 'Unknown';
+      addLogEntry(state, {
+        type: 'steal',
+        message: `Stole a resource from ${victimName}`,
+        playerId,
+        data: { victimId: targets[0], resource: stolenResource },
+      });
     }
+    finishRobberPhase(gameId, state);
+  } else {
+    // Multiple targets — player must choose
+    state.pendingStealTargets = targets;
+    broadcastState(gameId, state);
+    scheduleBotTurn(gameId);
+    return; // Stay in MoveRobber phase until steal_from is received
+  }
+}
+
+export function handleStealFrom(
+  playerId: string,
+  gameId: string,
+  payload: { victimId: string },
+): void {
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+
+  const current = getCurrentPlayer(state);
+  if (current.id !== playerId) return sendError(playerId, 'Not your turn');
+  if (!state.pendingStealTargets || state.pendingStealTargets.length === 0) {
+    return sendError(playerId, 'No pending steal');
+  }
+  if (!state.pendingStealTargets.includes(payload.victimId)) {
+    return sendError(playerId, 'Invalid steal target');
   }
 
+  const stolenResource = executeSteal(state, payload.victimId, playerId);
+  if (stolenResource) {
+    const victimName = state.players.find(p => p.id === payload.victimId)?.name || 'Unknown';
+    addLogEntry(state, {
+      type: 'steal',
+      message: `Stole a resource from ${victimName}`,
+      playerId,
+      data: { victimId: payload.victimId, resource: stolenResource },
+    });
+  }
+  state.pendingStealTargets = [];
+  finishRobberPhase(gameId, state);
+}
+
+function finishRobberPhase(gameId: string, state: GameState): void {
   // If a dev card (knight) was played before rolling, return to RollDice
   const savedPhase = preDevCardPhase.get(gameId);
   if (savedPhase === GamePhase.RollDice) {
@@ -915,12 +1000,13 @@ export function handlePassSpecialBuild(playerId: string, gameId: string): void {
 export function handleDevGiveResources(
   playerId: string,
   gameId: string,
-  payload: { resources: Partial<Resources> },
+  payload: { resources: Partial<Resources>; targetPlayerId?: string },
 ): void {
   if (process.env.NODE_ENV === 'production') return sendError(playerId, 'Not available');
   const state = games.get(gameId);
   if (!state) return sendError(playerId, 'Game not found');
-  const player = state.players.find((p) => p.id === playerId);
+  const targetId = payload.targetPlayerId || playerId;
+  const player = state.players.find((p) => p.id === targetId);
   if (!player) return sendError(playerId, 'Player not found');
 
   const toAdd: Resources = {
@@ -931,8 +1017,14 @@ export function handleDevGiveResources(
     wool: Math.max(0, payload.resources.wool ?? 0),
   };
   player.resources = addResources(player.resources, toAdd);
-  addLogEntry(state, { type: 'chat', message: '[DEV] Gave self resources', playerId });
-  broadcastState(gameId, state);
+  // Use distribute log entry to trigger resource animations
+  addLogEntry(state, {
+    type: 'distribute',
+    message: `received ${Object.entries(toAdd).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ')} [DEV]`,
+    playerId: targetId,
+    data: { resources: toAdd },
+  });
+  broadcastAndCheckVictory(gameId, state);
 }
 
 export function handleDevGiveDevCard(
@@ -1144,13 +1236,28 @@ function botSetupTurn(gameId: string, state: GameState, bot: Player): void {
     const key = edgeKey(e);
     return !state.board.edgeBuildings.has(key);
   });
-  if (validRoads.length === 0) return;
 
-  const road = validRoads[Math.floor(Math.random() * validRoads.length)];
-  const rError = handleSetupRoad(state, bot.id, road);
-  if (rError) return;
+  // Shuffle and try each valid road until one succeeds (some may be on water)
+  for (let i = validRoads.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [validRoads[i], validRoads[j]] = [validRoads[j], validRoads[i]];
+  }
 
-  addLogEntry(state, { type: 'place_road', message: 'Road placed (setup, bot)', playerId: bot.id });
+  let roadPlaced = false;
+  for (const road of validRoads) {
+    const rError = handleSetupRoad(state, bot.id, road);
+    if (!rError) {
+      addLogEntry(state, { type: 'place_road', message: 'Road placed (setup, bot)', playerId: bot.id });
+      roadPlaced = true;
+      break;
+    }
+  }
+
+  if (!roadPlaced) {
+    // Fallback: no valid road found — still advance to prevent hanging
+    addLogEntry(state, { type: 'chat', message: '[BOT] Could not place road during setup', playerId: bot.id });
+  }
+
   advanceSetupPhase(state);
 
   for (const p of state.players) {
@@ -1187,6 +1294,18 @@ function botRollDice(gameId: string, state: GameState, bot: Player): void {
 }
 
 function botMoveRobber(gameId: string, state: GameState, bot: Player): void {
+  // If there are pending steal targets (from a prior move), pick randomly
+  if (state.pendingStealTargets && state.pendingStealTargets.length > 0) {
+    const victimId = state.pendingStealTargets[Math.floor(Math.random() * state.pendingStealTargets.length)];
+    const stolenResource = executeSteal(state, victimId, bot.id);
+    if (stolenResource) {
+      addLogEntry(state, { type: 'steal', message: 'Stole a resource (bot)', playerId: bot.id, data: { victimId } });
+    }
+    state.pendingStealTargets = [];
+    finishRobberPhase(gameId, state);
+    return;
+  }
+
   // Pick a random hex that isn't the current robber position
   const validHexes = state.board.hexes.filter(
     (h) => !hexEquals(h.coord, state.robberPosition),
@@ -1205,16 +1324,15 @@ function botMoveRobber(gameId: string, state: GameState, bot: Player): void {
     if (stolenResource) {
       addLogEntry(state, {
         type: 'steal',
-        message: `Stole a resource (bot)`,
+        message: 'Stole a resource (bot)',
         playerId: bot.id,
         data: { victimId },
       });
     }
   }
 
-  transitionPhase(state, GamePhase.TradeAndBuild);
-  broadcastAndCheckVictory(gameId, state);
-  scheduleBotTurn(gameId);
+  state.pendingStealTargets = [];
+  finishRobberPhase(gameId, state);
 }
 
 function botTradeAndBuild(gameId: string, state: GameState, bot: Player): void {

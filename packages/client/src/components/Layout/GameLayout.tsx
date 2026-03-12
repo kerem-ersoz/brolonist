@@ -11,9 +11,9 @@ interface GameLayoutProps {
 
 export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton }: GameLayoutProps) {
   return (
-    <div className="flex-1 bg-gray-900 flex flex-col lg:flex-row overflow-hidden relative">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
       {/* Main area */}
-      <div className="flex-1 flex flex-col min-h-0 relative">
+      <div className="flex-1 flex flex-col min-h-0 relative lg:mr-80">
         {/* Board */}
         <div className="flex-1 min-h-0 p-2">{board}</div>
         {/* Spacer so the hand doesn't cover the board */}
@@ -21,8 +21,8 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
 
         {/* Dice + End turn — stacked vertically, bottom-right, above everything */}
         {(dice || endTurnButton) && (
-          <div className="absolute bottom-[100px] right-4 z-40 flex flex-col items-end gap-2 pointer-events-auto">
-            {dice}
+          <div className="absolute bottom-px right-[11px] z-40 flex flex-col items-end gap-2 pointer-events-auto">
+            <div style={{ marginRight: -15 }}>{dice}</div>
             {endTurnButton}
           </div>
         )}
@@ -35,9 +35,9 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
         </div>
       </div>
 
-      {/* Right sidebar — game log + chat (desktop only) */}
+      {/* Right sidebar — absolutely positioned to span full height */}
       {rightPanel && (
-        <div className="hidden lg:flex lg:flex-col lg:w-80 p-2 gap-2 border-l border-gray-700/50 overflow-hidden">
+        <div className="hidden lg:flex lg:flex-col lg:w-80 py-2 px-2 gap-2 border-l border-gray-700/50 absolute top-0 right-0 bottom-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
           {rightPanel}
         </div>
       )}

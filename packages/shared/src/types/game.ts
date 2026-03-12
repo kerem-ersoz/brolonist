@@ -36,6 +36,8 @@ export enum MapType {
   Archipelago = 'archipelago',
   RichCoast = 'rich_coast',
   DesertRing = 'desert_ring',
+  Turkey = 'turkey',
+  World = 'world',
 }
 
 export interface HexTile {
@@ -156,6 +158,7 @@ export interface GameState {
   activeTradeOffers: TradeOffer[];
 
   pendingDiscards: PlayerId[];
+  pendingStealTargets: PlayerId[];
 
   specialBuildOrder: PlayerId[];
   specialBuildCurrentIndex: number;

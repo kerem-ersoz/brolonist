@@ -8,6 +8,7 @@ import {
   handleBuyDevCard,
   handlePlayDevCard,
   handleMoveRobber,
+  handleStealFrom,
   handleDiscardCards,
   handleTradeOffer,
   handleTradeRespond,
@@ -110,6 +111,9 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
       break;
     case 'move_robber':
       handleMoveRobber(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleMoveRobber>[2]);
+      break;
+    case 'steal_from':
+      handleStealFrom(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleStealFrom>[2]);
       break;
     case 'discard_cards':
       handleDiscardCards(playerId, getGameId(playerId), msg.payload as Parameters<typeof handleDiscardCards>[2]);

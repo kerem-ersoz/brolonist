@@ -6,9 +6,11 @@ export interface Point {
 }
 
 // Axial-to-pixel conversion (pointy-top hexagons)
-export function axialToPixel(q: number, r: number, size: number): Point {
-  const x = size * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
-  const y = size * ((3 / 2) * r);
+export function axialToPixel(q: number, r: number, size: number, gap = 5): Point {
+  const s = size + gap;
+  const sv = size + gap - 2;
+  const x = s * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
+  const y = sv * ((3 / 2) * r);
   return { x, y };
 }
 

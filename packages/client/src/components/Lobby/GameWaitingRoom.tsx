@@ -69,7 +69,7 @@ export function GameWaitingRoom({
   const canAddMore = lobby.players.length < 8;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="min-h-screen text-white flex flex-col">
       {/* Header */}
       <div className="border-b border-gray-700 px-4 py-4 sm:px-6">
         <h1 className="text-2xl font-bold">{lobby.name}</h1>
@@ -183,7 +183,7 @@ export function GameWaitingRoom({
                     onChange={(e) => onUpdateConfig({ mapType: e.target.value })}
                     className="w-full mt-1 bg-gray-700 text-white rounded px-2 py-1 text-sm border border-gray-600"
                   >
-                    {['standard','random','pangaea','archipelago','rich_coast','desert_ring'].map(m => (
+                    {['standard','random','pangaea','archipelago','rich_coast','desert_ring','turkey','world'].map(m => (
                       <option key={m} value={m}>{t(`map.${m.replace('_','')}` as never) || m}</option>
                     ))}
                   </select>

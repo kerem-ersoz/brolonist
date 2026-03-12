@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { SpriteImage } from '../Sprites/SpriteImage';
 
 const RESOURCES = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
 const RESOURCE_ICONS: Record<string, string> = {
@@ -10,12 +11,12 @@ const RESOURCE_ICONS: Record<string, string> = {
   wool: '🐑',
 };
 
-const RESOURCE_COLORS: Record<string, string> = {
-  brick: '#c45a2c',
-  lumber: '#2d6b2d',
-  ore: '#6b6b6b',
-  grain: '#d4a832',
-  wool: '#7bc67b',
+const RESOURCE_CARD_SPRITES: Record<string, string> = {
+  brick: '/assets/sprites/card-brick.png',
+  lumber: '/assets/sprites/card-wood.png',
+  ore: '/assets/sprites/card-ore.png',
+  grain: '/assets/sprites/card-grain.png',
+  wool: '/assets/sprites/card-sheep.png',
 };
 
 const PLAYER_COLORS: Record<string, string> = {
@@ -114,7 +115,7 @@ export function TradeModal({
 
   return (
     // Centered above the hand
-    <div style={{ position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)', zIndex: 35, width: 380 }}>
+    <div style={{ position: 'fixed', bottom: 108, left: 23, zIndex: 50, width: 380 }}>
       <div className="bg-gray-800/95 backdrop-blur rounded-xl shadow-2xl overflow-hidden border border-gray-600">
         <div className="p-3 space-y-2">
           {/* Close button */}
@@ -145,10 +146,9 @@ export function TradeModal({
                         ? 'border-red-400 shadow-[0_0_8px_rgba(248,113,113,0.4)] -translate-y-0.5'
                         : 'border-white/20 hover:border-white/50'
                     }`}
-                    style={{ backgroundColor: RESOURCE_COLORS[r] }}
                     title={t(`resources.${r}`)}
                   >
-                    <span className="text-lg leading-none drop-shadow">{RESOURCE_ICONS[r]}</span>
+                    <SpriteImage src={RESOURCE_CARD_SPRITES[r]} fallback={<span className="text-lg leading-none drop-shadow">{RESOURCE_ICONS[r]}</span>} className="w-full h-full object-fill" />
                     {selected > 0 && (
                       <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[16px] h-[16px] rounded-full flex items-center justify-center shadow-md px-0.5">
                         {selected}

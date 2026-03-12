@@ -53,6 +53,9 @@ export const TradeWithBankSchema = z.object({
   givingCount: z.number(),
   receiving: z.enum(['brick', 'lumber', 'ore', 'grain', 'wool']),
 });
+export const StealFromSchema = z.object({
+  victimId: z.string(),
+});
 export const PlayDevCardSchema = z.object({
   cardType: z.enum(['knight', 'road_building', 'year_of_plenty', 'monopoly']),
   params: z.record(z.unknown()).optional(),
@@ -64,7 +67,9 @@ export const CLIENT_MESSAGE_TYPES = [
   'join_game', 'leave_game', 'ready', 'start_game', 'update_config',
   'roll_dice', 'place_settlement', 'place_road', 'place_city',
   'buy_dev_card', 'play_dev_card', 'move_robber', 'discard_cards',
-  'trade_offer', 'trade_respond', 'trade_confirm', 'trade_cancel', 'trade_with_bank', 'end_turn', 'chat',
+  'trade_offer', 'trade_respond', 'trade_confirm', 'trade_cancel', 'trade_with_bank',
+  'steal_from',
+  'end_turn', 'chat',
 ] as const;
 
 export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number];

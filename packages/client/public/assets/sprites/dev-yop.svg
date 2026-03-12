@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 48">
+  <rect x="1" y="1" width="34" height="46" rx="3" fill="#4a2060" stroke="#6a3a80" stroke-width="1"/>
+  <rect x="8" y="10" width="8" height="12" rx="1" fill="#c45a2c" stroke="#8b3a1a" stroke-width="0.5"/>
+  <text x="12" y="19" text-anchor="middle" font-size="6" fill="#fff">?</text>
+  <rect x="20" y="10" width="8" height="12" rx="1" fill="#2d6b2d" stroke="#1a4a1a" stroke-width="0.5"/>
+  <text x="24" y="19" text-anchor="middle" font-size="6" fill="#fff">?</text>
+  <text x="18" y="32" text-anchor="middle" font-size="5" fill="#d0b0e0" font-weight="bold">YEAR OF</text>
+  <text x="18" y="40" text-anchor="middle" font-size="5" fill="#d0b0e0" font-weight="bold">PLENTY</text>
+</svg>

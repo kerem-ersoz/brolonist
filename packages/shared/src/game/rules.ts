@@ -2,12 +2,15 @@ import { GameState, Board, vertexKey, edgeKey } from '../types/game.js';
 import {
   VertexId,
   EdgeId,
-  VertexDirection,
   EdgeDirection,
+  VertexDirection,
   edgeEquals,
   vertexAdjacentVertices,
   vertexAdjacentEdges,
   edgeAdjacentVertices,
+  vertexAdjacentHexes,
+  hexEquals,
+  type HexCoord,
 } from '../hex/coordinates.js';
 import {
   BuildingType,
@@ -70,10 +73,30 @@ export function canPlaceSettlement(
   if (!isSetup && !hasResources(player.resources, BUILDING_COSTS[BuildingType.Settlement]))
     return 'Insufficient resources';
   if (!isVertexEmpty(state.board, vertex)) return 'Vertex is occupied';
+  // At least one adjacent hex must be a land hex
+  const adjHexes = vertexAdjacentHexes(vertex);
+  if (!adjHexes.some(h => state.board.hexes.some(bh => hexEquals(bh.coord, h)))) return 'Cannot build on water';
   if (!isDistanceRuleSatisfied(state.board, vertex)) return 'Too close to another building';
   if (!isSetup && !isConnectedToRoad(state.board, vertex, playerId))
     return 'Not connected to your road';
   return null;
+}
+
+/** Get the two hexes that share an edge. */
+function edgeAdjacentHexes(edge: EdgeId): [HexCoord, HexCoord] {
+  const { q, r } = edge.hex;
+  switch (edge.direction) {
+    case EdgeDirection.NE: return [{ q, r }, { q: q + 1, r: r - 1 }];
+    case EdgeDirection.E:  return [{ q, r }, { q: q + 1, r }];
+    case EdgeDirection.SE: return [{ q, r }, { q, r: r + 1 }];
+    default: return [{ q, r }, { q, r }];
+  }
+}
+
+/** Check if at least one hex adjacent to this edge is a land hex. */
+function isEdgeOnLand(board: Board, edge: EdgeId): boolean {
+  const [h1, h2] = edgeAdjacentHexes(edge);
+  return board.hexes.some(h => hexEquals(h.coord, h1) || hexEquals(h.coord, h2));
 }
 
 /** Validate road placement. Returns null if valid, error string otherwise. */
@@ -89,6 +112,7 @@ export function canPlaceRoad(
   if (!isFree && !hasResources(player.resources, BUILDING_COSTS[BuildingType.Road]))
     return 'Insufficient resources';
   if (state.board.edgeBuildings.has(edgeKey(edge))) return 'Edge is occupied';
+  if (!isEdgeOnLand(state.board, edge)) return 'Cannot build on water';
   if (!isEdgeConnectedToNetwork(state.board, edge, playerId))
     return 'Not connected to your network';
   return null;

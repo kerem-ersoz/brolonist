@@ -1,4 +1,5 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface LogEntry {
   timestamp: string;
@@ -16,27 +17,137 @@ interface GameLogProps {
 
 const COLOR_MAP: Record<string, string> = {
   red: 'text-red-400', blue: 'text-blue-400', white: 'text-gray-200', orange: 'text-orange-400',
-  green: 'text-green-400', brown: 'text-amber-500', purple: 'text-purple-400', teal: 'text-teal-400',
+  green: 'text-lime-400', brown: 'text-yellow-800', purple: 'text-purple-400', teal: 'text-teal-400',
 };
 
-const RESOURCE_EMOJI: Record<string, string> = {
-  brick: '🧱', lumber: '🪵', ore: '⛏️', grain: '🌾', wool: '🐑',
+const RESOURCE_SPRITES: Record<string, string> = {
+  brick: '/assets/sprites/card-brick.png',
+  lumber: '/assets/sprites/card-wood.png',
+  ore: '/assets/sprites/card-ore.png',
+  grain: '/assets/sprites/card-grain.png',
+  wool: '/assets/sprites/card-sheep.png',
 };
 
-function formatResources(data?: Record<string, unknown>): string | null {
-  const resources = data?.resources as Record<string, number> | undefined;
-  if (!resources) return null;
+const RESOURCE_TOKEN: Record<string, string> = {
+  brick: ':brick:', lumber: ':lumber:', ore: ':ore:', grain: ':grain:', wool: ':wool:',
+};
+
+// Also match common aliases
+const TOKEN_TO_RESOURCE: Record<string, string> = {
+  ':brick:': 'brick', ':lumber:': 'lumber', ':wood:': 'lumber',
+  ':ore:': 'ore', ':grain:': 'grain', ':wheat:': 'grain',
+  ':wool:': 'wool', ':sheep:': 'wool',
+};
+
+function formatResourceStr(resources?: Record<string, number>): string {
+  if (!resources) return '';
   const parts: string[] = [];
   for (const [res, count] of Object.entries(resources)) {
     if (count > 0) {
-      const emoji = RESOURCE_EMOJI[res] || res;
-      parts.push(`${emoji}${count > 1 ? `×${count}` : ''}`);
+      const token = RESOURCE_TOKEN[res] || res;
+      parts.push(`${token}${count > 1 ? `×${count}` : ''}`);
     }
   }
-  return parts.length > 0 ? parts.join(' ') : null;
+  return parts.join(' ');
+}
+
+/** Renders text with :resource: tokens replaced by inline sprite images */
+function renderWithSprites(text: string): ReactNode {
+  const pattern = /:(brick|lumber|wood|ore|grain|wheat|wool|sheep):/g;
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const token = match[0];
+    const res = TOKEN_TO_RESOURCE[token];
+    if (res && RESOURCE_SPRITES[res]) {
+      parts.push(
+        <img key={key++} src={RESOURCE_SPRITES[res]} alt={`:${res}:`} className="inline-block w-4 h-5 object-fill align-text-bottom mx-px rounded-sm" />
+      );
+    } else {
+      parts.push(token);
+    }
+    lastIndex = pattern.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>;
+}
+
+function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name: string; color: string }>, t: (key: string, opts?: Record<string, string>) => string): string {
+  // Chat messages are never translated — show as-is
+  if (entry.type === 'chat') return entry.message;
+
+  const data = entry.data || {};
+
+  switch (entry.type) {
+    case 'game_start':
+      return t('log.game_start');
+    case 'roll_dice': {
+      const dice = data.dice as [number, number] | undefined;
+      const sum = dice ? String(dice[0] + dice[1]) : '';
+      return t('log.roll_dice', { sum });
+    }
+    case 'distribute':
+      return t('log.distribute', { resources: formatResourceStr(data.resources as Record<string, number>) });
+    case 'place_settlement':
+      return entry.message.includes('setup') ? t('log.place_settlement_setup') : t('log.place_settlement');
+    case 'place_road':
+      return entry.message.includes('setup') ? t('log.place_road_setup') : t('log.place_road');
+    case 'place_city':
+      return t('log.place_city');
+    case 'end_turn':
+      return t('log.end_turn');
+    case 'buy_dev_card':
+      return t('log.buy_dev_card');
+    case 'play_dev_card':
+      return t('log.play_dev_card', { card: entry.message.replace('Played ', '') });
+    case 'move_robber':
+      return t('log.move_robber');
+    case 'steal': {
+      const victimId = data.victimId as string | undefined;
+      const victim = victimId ? (playerNames[victimId]?.name || '?') : '?';
+      return t('log.steal', { victim });
+    }
+    case 'discard':
+      return t('log.discard');
+    case 'trade_offer': {
+      const offering = formatResourceStr(data.offering as Record<string, number>);
+      const requesting = formatResourceStr(data.requesting as Record<string, number>);
+      return offering || requesting
+        ? t('log.trade_offer', { giving: offering || '?', requesting: requesting || '?' })
+        : entry.message;
+    }
+    case 'trade_accept':
+      return t('log.trade_accept');
+    case 'trade_decline':
+      return t('log.trade_decline');
+    case 'trade_counter':
+      return t('log.trade_counter');
+    case 'trade_completed':
+      return t('log.trade_completed');
+    case 'trade_cancel':
+      return t('log.trade_cancel');
+    case 'trade_expired':
+      return t('log.trade_expired');
+    case 'trade_bank':
+      return t('log.trade_bank', { giving: '', receiving: '' });
+    case 'pass_special_build':
+      return t('log.pass_special_build');
+    case 'trade_proposed':
+      return entry.message; // client-side, already formatted
+    default:
+      return entry.message;
+  }
 }
 
 export function GameLog({ entries, playerNames, onSendChat }: GameLogProps) {
+  const { t } = useTranslation();
   const endRef = useRef<HTMLDivElement>(null);
   const [chatInput, setChatInput] = useState('');
 
@@ -53,28 +164,23 @@ export function GameLog({ entries, playerNames, onSendChat }: GameLogProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider px-1 py-1">
-        Game Log
+        {t('log.gameLog')}
       </div>
 
       {/* Log entries */}
-      <div className="flex-1 bg-gray-800 rounded-lg p-2 overflow-y-auto text-xs space-y-1 min-h-0">
+      <div className="flex-1 rounded-lg p-2 overflow-y-auto text-xs space-y-1 min-h-0" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
         {entries.length === 0 && (
-          <div className="text-gray-500 text-center py-4">Game events will appear here</div>
+          <div className="text-gray-500 text-center py-4">{t('log.emptyLog')}</div>
         )}
         {entries.map((entry, i) => {
           const player = entry.playerId ? playerNames[entry.playerId] : null;
           const colorClass = player ? (COLOR_MAP[player.color] || 'text-gray-300') : 'text-gray-500';
           const isChat = entry.type === 'chat';
-          const isDistribute = entry.type === 'distribute';
-          const resourceStr = isDistribute ? formatResources(entry.data) : null;
+          const localizedMsg = useLocalizedMessage(entry, playerNames, t);
           return (
             <div key={i} className={`leading-tight ${isChat ? 'pl-1 border-l-2 border-blue-500/40' : ''}`}>
               {player && <span className={`font-semibold ${colorClass}`}>{player.name}: </span>}
-              {isDistribute && resourceStr ? (
-                <span className="text-gray-300">received {resourceStr}</span>
-              ) : (
-                <span className="text-gray-300">{entry.message}</span>
-              )}
+              <span className="text-gray-300">{renderWithSprites(localizedMsg)}</span>
             </div>
           );
         })}
@@ -83,20 +189,22 @@ export function GameLog({ entries, playerNames, onSendChat }: GameLogProps) {
 
       {/* Chat input */}
       {onSendChat && (
-        <div className="mt-2 flex gap-1">
+        <div className="flex gap-1">
           <input
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Chat..."
-            className="flex-1 px-2 py-1.5 bg-gray-700 text-white text-xs rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+            className="flex-1 px-2 py-1.5 text-white text-xs rounded border border-white/20 focus:border-blue-500 focus:outline-none"
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
             maxLength={200}
           />
           <button
             onClick={handleSend}
             disabled={!chatInput.trim()}
-            className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-xs rounded"
+            className="px-2 py-1.5 hover:brightness-125 disabled:opacity-40 text-white text-xs rounded"
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
           >
             ➤
           </button>

@@ -16,6 +16,7 @@ export interface TradeAnimationItem {
   offering: Record<string, number>;   // what fromPlayer gives
   requesting: Record<string, number>; // what fromPlayer receives
   myPlayerId: string;
+  isSteal?: boolean;
 }
 
 export type ResourceAnimationItem = DistributeAnimationItem | TradeAnimationItem;
@@ -33,12 +34,12 @@ const RESOURCE_COLORS: Record<string, string> = {
   wool: '#7bc67b',
 };
 
-const RESOURCE_ICONS: Record<string, string> = {
-  brick: '🧱',
-  lumber: '🪵',
-  ore: '⛏️',
-  grain: '🌾',
-  wool: '🐑',
+const RESOURCE_CARD_SPRITES: Record<string, string> = {
+  brick: '/assets/sprites/card-brick.png',
+  lumber: '/assets/sprites/card-wood.png',
+  ore: '/assets/sprites/card-ore.png',
+  grain: '/assets/sprites/card-grain.png',
+  wool: '/assets/sprites/card-sheep.png',
 };
 
 interface FlyingCard {
@@ -64,8 +65,22 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
     return { x: window.innerWidth - 160, y: window.innerHeight / 2 };
   }, []);
 
+  const getPlayerAreaPos = useCallback(() => {
+    const el = document.querySelector('[data-player-id]');
+    if (el) {
+      const parent = el.parentElement;
+      if (parent) {
+        const rect = parent.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 3 };
+      }
+      const rect = el.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    return { x: window.innerWidth - 160, y: window.innerHeight / 3 };
+  }, []);
+
   const getHandPos = useCallback(() => {
-    return { x: window.innerWidth / 2, y: window.innerHeight - 60 };
+    return { x: 80, y: window.innerHeight - 40 };
   }, []);
 
   const getBankPos = useCallback((offset: number) => {
@@ -111,7 +126,7 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
       const handPos = getHandPos();
       const iAmFrom = item.fromPlayerId === item.myPlayerId;
       const otherPlayerId = iAmFrom ? item.toPlayerId : item.fromPlayerId;
-      const otherPos = getPlayerPos(otherPlayerId);
+      const otherPos = item.isSteal ? getPlayerAreaPos() : getPlayerPos(otherPlayerId);
 
       // Cards I give: from my hand -> their player tab
       const myGiving = iAmFrom ? item.offering : item.requesting;
@@ -175,7 +190,7 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
     }
 
     return newCards;
-  }, [getPlayerPos, getHandPos, getBankPos, buildCardsForResources]);
+  }, [getPlayerPos, getPlayerAreaPos, getHandPos, getBankPos, buildCardsForResources]);
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -206,7 +221,7 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
     const cleanupTimer = setTimeout(() => {
       setCards((prev) => prev.filter((c) => !allNewCards.some((nc) => nc.id === c.id)));
       for (const item of items) onComplete(item.id);
-    }, maxDelay + 1600); // 1500ms for the slide animation duration + buffer
+    }, maxDelay + 2400); // 2200ms for the slide animation duration + buffer
 
     return () => {
       cancelAnimationFrame(animateTimer);
@@ -218,22 +233,33 @@ export function ResourceAnimation({ items, onComplete }: ResourceAnimationProps)
 
   return (
     <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden">
-      {cards.map((card) => (
-        <div
-          key={card.id}
-          className="absolute w-8 h-11 rounded shadow-lg border border-white/30 flex items-center justify-center"
-          style={{
-            backgroundColor: RESOURCE_COLORS[card.resource] || '#666',
-            left: card.animating ? card.endX - 16 : card.startX - 16,
-            top: card.animating ? card.endY - 22 : card.startY - 22,
-            transition: `left 1500ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, top 1500ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, opacity 200ms ease ${card.delay + 1300}ms`,
-            opacity: card.animating ? 0.9 : 1,
-            zIndex: 60,
-          }}
-        >
-          <span className="text-xs">{RESOURCE_ICONS[card.resource]}</span>
-        </div>
-      ))}
+      {cards.map((card) => {
+        const sprite = RESOURCE_CARD_SPRITES[card.resource];
+        return (
+          <div
+            key={card.id}
+            className="absolute rounded-lg shadow-lg overflow-hidden"
+            style={{
+              width: 40,
+              height: 58,
+              left: card.animating ? card.endX - 20 : card.startX - 20,
+              top: card.animating ? card.endY - 29 : card.startY - 29,
+              transition: `left 2200ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, top 2200ms cubic-bezier(0.4, 0, 0.2, 1) ${card.delay}ms, opacity 0ms ease ${card.delay + 2200}ms`,
+              opacity: card.animating ? 0 : 1,
+              zIndex: 60,
+            }}
+          >
+            {sprite ? (
+              <img src={sprite} alt={card.resource} className="w-full h-full object-cover" draggable={false} />
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center border border-white/30"
+                style={{ backgroundColor: RESOURCE_COLORS[card.resource] || '#666' }}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

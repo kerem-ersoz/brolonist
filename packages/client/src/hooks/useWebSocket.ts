@@ -20,8 +20,10 @@ export function useWebSocket(gameId: string | null) {
     if (!token || !gameId) return;
 
     setConnectionStatus('connecting');
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws?token=${token}`;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    const wsHost = apiUrl ? new URL(apiUrl).host : window.location.host;
+    const wsProtocol = apiUrl ? (new URL(apiUrl).protocol === 'https:' ? 'wss:' : 'ws:') : (window.location.protocol === 'https:' ? 'wss:' : 'ws:');
+    const wsUrl = `${wsProtocol}//${wsHost}/ws?token=${token}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
@@ -70,8 +72,7 @@ export function useWebSocket(gameId: string | null) {
             break;
           }
           case 'trade_completed': {
-            // State is already updated via game_state broadcast — just log it
-            addLogEntry({ type: 'trade_completed', message: `Trade completed!`, timestamp: new Date().toISOString() });
+            // State is already updated via game_state broadcast — animation is triggered from log entry
             break;
           }
           default: {

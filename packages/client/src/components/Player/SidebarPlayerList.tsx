@@ -1,3 +1,6 @@
+import { ICONS, DEV_CARD_SPRITES } from '../../utils/sprites';
+import { SpriteImage } from '../Sprites/SpriteImage';
+
 interface SidebarPlayer {
   id: string;
   name: string;
@@ -73,8 +76,9 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
             key={p.id}
             data-player-id={p.id}
             className={`rounded-lg p-2 ${
-              isCurrentTurn ? 'ring-2 ring-yellow-400 bg-gray-800' : 'bg-gray-800/60'
+              isCurrentTurn ? 'ring-2 ring-yellow-400' : ''
             } ${p.status === 'quit' ? 'opacity-40' : ''}`}
+            style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
           >
             <div className="flex items-center gap-2">
               {/* Player avatar */}
@@ -108,40 +112,40 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
               {/* Cards count — opponents only */}
               {!isMe && (
                 <div className="flex items-center gap-0.5" title="Total resource cards">
-                  <span className="text-[10px]">🃏</span>
+                  <SpriteImage src={ICONS.cardResource} fallback={<span className="text-[12px] leading-none">🎴</span>} className="w-3 h-3 object-contain" />
                   <span className="text-[10px] text-gray-300 font-medium">{totalCards}</span>
                 </div>
               )}
 
               {/* Dev cards */}
               <div className="flex items-center gap-0.5" title="Development cards">
-                <span className="text-[10px]">📜</span>
+                <SpriteImage src={ICONS.cardDev} fallback={<span className="text-[12px] leading-none">🃏</span>} className="w-3 h-3 object-contain" />
                 <span className="text-[10px] text-gray-300 font-medium">{devCards}</span>
               </div>
 
               {/* Knights */}
               <div className="flex items-center gap-0.5" title="Knights played">
-                <span className="text-[10px]">⚔️</span>
+                <SpriteImage src={DEV_CARD_SPRITES.knight} fallback={<span className="text-[12px] leading-none">⚔️</span>} className="w-3 h-3 object-contain" />
                 <span className="text-[10px] text-gray-300 font-medium">{p.knightsPlayed}</span>
               </div>
 
               {/* Longest road length */}
               <div className="flex items-center gap-0.5" title="Longest road">
-                <span className="text-[10px]">🛤️</span>
+                <SpriteImage src={ICONS.road} fallback={<span className="text-[12px] leading-none">🛣️</span>} className="w-3 h-3 object-contain" />
                 <span className="text-[10px] text-gray-300 font-medium">{p.longestRoadLength ?? 0}</span>
               </div>
 
               {/* Pieces remaining */}
               <div className="flex items-center gap-0.5 ml-auto" title="Roads remaining">
-                <span className="text-[10px]">🛣️</span>
+                <SpriteImage src={ICONS.road} fallback={<span className="text-[12px] leading-none">🛣️</span>} className="w-3 h-3 object-contain" />
                 <span className="text-[10px] text-gray-300">{15 - p.roadsBuilt}</span>
               </div>
               <div className="flex items-center gap-0.5" title="Settlements remaining">
-                <span className="text-[10px]">🏠</span>
+                <SpriteImage src={ICONS.settlement} fallback={<span className="text-[12px] leading-none">🏠</span>} className="w-3 h-3 object-contain" />
                 <span className="text-[10px] text-gray-300">{5 - p.settlementsBuilt}</span>
               </div>
               <div className="flex items-center gap-0.5" title="Cities remaining">
-                <span className="text-[10px]">🏙️</span>
+                <SpriteImage src={ICONS.city} fallback={<span className="text-[12px] leading-none">🏙️</span>} className="w-3 h-3 object-contain" />
                 <span className="text-[10px] text-gray-300">{4 - p.citiesBuilt}</span>
               </div>
             </div>

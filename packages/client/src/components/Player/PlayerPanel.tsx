@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { RESOURCE_SPRITES, ICONS } from '../../utils/sprites';
+import { SpriteImage } from '../Sprites/SpriteImage';
 
 interface PlayerPanelProps {
   resources: Record<string, number>;
@@ -9,7 +11,13 @@ interface PlayerPanelProps {
   victoryPoints: number;
 }
 
-const RESOURCE_ICONS: Record<string, string> = { brick: '🧱', lumber: '🪵', ore: '⛏️', grain: '🌾', wool: '🐑' };
+const RESOURCE_ICONS = {
+  wood: '🌲',
+  brick: '🧱',
+  sheep: '🐑',
+  grain: '🌾',
+  ore: '⛰️'
+};
 
 export function PlayerPanel({ resources, developmentCards, roadsBuilt, settlementsBuilt, citiesBuilt, victoryPoints }: PlayerPanelProps) {
   const { t } = useTranslation();
@@ -21,28 +29,13 @@ export function PlayerPanel({ resources, developmentCards, roadsBuilt, settlemen
       </div>
       {/* Resources */}
       <div className="flex gap-2 flex-wrap">
-        {Object.entries(resources).map(([type, count]) => (
-          <div key={type} className="flex items-center gap-1 bg-gray-700 rounded px-2 py-1 text-sm">
-            <span>{RESOURCE_ICONS[type]}</span>
-            <span className="text-white font-mono">{count}</span>
-          </div>
-        ))}
-      </div>
-      {/* Dev cards */}
-      {developmentCards.length > 0 && (
-        <div className="flex gap-1 flex-wrap">
-          {developmentCards.map((card, i) => (
-            <div key={i} className="bg-purple-900 text-purple-200 text-xs px-2 py-1 rounded">
-              {t(`devCards.${card.type}`)}
-            </div>
-          ))}
-        </div>
-      )}
-      {/* Building inventory */}
-      <div className="flex gap-3 text-xs text-gray-400">
-        <span>🛣️ {15 - roadsBuilt}</span>
-        <span>🏠 {5 - settlementsBuilt}</span>
-        <span>🏙️ {4 - citiesBuilt}</span>
+                                                                      <d                                            ap-1                                                             ma                                                    sNa                         one"                                   of                                           4                   
+                          e="te                     co                      </div>                      iv>           Dev c               {d               .l             (
+             class ame             class ame             class ame             class ame             class ame             class ame             class ame      t             class ame                      `d             class ame             class ame            
+                                                       }
+                                                                               e="flex items-center gap-1"><SpriteImag                                           /span>} className="w-3 h-3 object-contain" /> {15 - roadsBuilt}</span>
+        <span className="flex items-center gap-1"><SpriteImage src={ICONS.settlement} fallback={<span>🏠</span>} className="w-3 h-3 object-contain" /> {5 - settlementsBuilt}</span>
+        <span className="flex items-center gap-1"><SpriteImage src={ICONS.city} fallback={<span>🏙️</span>} className="w-3 h-3 object-contain" /> {4 - citiesBuilt}</span>
       </div>
     </div>
   );

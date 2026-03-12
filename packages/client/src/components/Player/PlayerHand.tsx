@@ -19,7 +19,9 @@ interface PlayerHandProps {
   discardMax?: number;
 }
 
-const RESOURCE_ORDER = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
+import { SpriteImage } from '../Sprites/SpriteImage';
+
+const RESOURCE_ORDER = ['lumber', 'brick', 'wool', 'grain', 'ore'] as const;
 
 const RESOURCE_COLORS: Record<string, string> = {
   brick: '#c45a2c',
@@ -37,12 +39,28 @@ const RESOURCE_ICONS: Record<string, string> = {
   wool: '🐑',
 };
 
-const DEV_CARD_STYLES: Record<string, { icon: string; color: string; border: string; label: string }> = {
-  knight: { icon: '⚔️', color: 'bg-red-900', border: 'border-red-500/50', label: 'Knight' },
-  victory_point: { icon: '⭐', color: 'bg-yellow-900', border: 'border-yellow-500/50', label: 'VP' },
-  road_building: { icon: '🛣️', color: 'bg-green-900', border: 'border-green-500/50', label: 'Roads' },
-  year_of_plenty: { icon: '🎁', color: 'bg-blue-900', border: 'border-blue-500/50', label: 'Plenty' },
-  monopoly: { icon: '👑', color: 'bg-purple-900', border: 'border-purple-500/50', label: 'Monopoly' },
+const RESOURCE_SPRITES: Record<string, string> = {
+  brick: '/assets/sprites/pip-brick.svg',
+  lumber: '/assets/sprites/pip-wood.svg',
+  ore: '/assets/sprites/pip-ore.svg',
+  grain: '/assets/sprites/pip-grain.svg',
+  wool: '/assets/sprites/pip-sheep.svg',
+};
+
+const RESOURCE_CARD_SPRITES: Record<string, string> = {
+  brick: '/assets/sprites/card-brick.png',
+  lumber: '/assets/sprites/card-wood.png',
+  ore: '/assets/sprites/card-ore.png',
+  grain: '/assets/sprites/card-grain.png',
+  wool: '/assets/sprites/card-sheep.png',
+};
+
+const DEV_CARD_STYLES: Record<string, { sprite: string; fallback: string; color: string; border: string; label: string }> = {
+  knight: { sprite: '/assets/sprites/dev-knight.png', fallback: '⚔️', color: 'bg-red-900', border: 'border-red-500/50', label: 'Knight' },
+  victory_point: { sprite: '/assets/sprites/dev-vp.png', fallback: '⭐', color: 'bg-yellow-900', border: 'border-yellow-500/50', label: 'VP' },
+  road_building: { sprite: '/assets/sprites/dev-roads.png', fallback: '🛣️', color: 'bg-green-900', border: 'border-green-500/50', label: 'Roads' },
+  year_of_plenty: { sprite: '/assets/sprites/dev-yop.png', fallback: '🎁', color: 'bg-blue-900', border: 'border-blue-500/50', label: 'Plenty' },
+  monopoly: { sprite: '/assets/sprites/dev-mono.png', fallback: '👑', color: 'bg-purple-900', border: 'border-purple-500/50', label: 'Monopoly' },
 };
 
 const DEV_CARD_I18N: Record<string, string> = {
@@ -103,10 +121,71 @@ export function PlayerHand({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
 
-      {/* Dev cards — pinned to far left, stacked by type */}
-      {developmentCards.length > 0 && (
-        <div className="pointer-events-auto absolute bottom-2 left-3 flex items-end gap-1.5 z-40">
-          {Object.entries(devCardGroups).map(([type, group]) => {
+      {/* Hand area — resource cards + dev cards, pinned to bottom-left */}
+      <div className="pointer-events-auto absolute bottom-4 left-6 flex items-end gap-3 z-40">
+
+        {/* Resource cards — horizontal line with overlap */}
+        <div className="flex items-end" style={{ minHeight: 80 }}>
+          <div className="flex">
+            {cards.map((card, i) => {
+              const key = `${card.resource}-${card.index}`;
+              const selected = selectedForTrade.includes(key);
+
+              return (
+                <div
+                  key={key}
+                  className="transition-all duration-200"
+                  style={{ marginLeft: i === 0 ? 0 : -28 }}
+                >
+                  <button
+                    onClick={() => {
+                      setSelectedForTrade((prev) => {
+                        const isSelected = prev.includes(key);
+                        if (!isSelected && discardMode && discardMax != null) {
+                          const currentCount = prev.length;
+                          if (currentCount >= discardMax) return prev;
+                        }
+                        const next = isSelected ? prev.filter((k) => k !== key) : [...prev, key];
+                        if (onSelectionChange) {
+                          const counts: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+                          for (const k of next) {
+                            const res = k.split('-')[0];
+                            counts[res] = (counts[res] || 0) + 1;
+                          }
+                          onSelectionChange(counts);
+                        }
+                        return next;
+                      });
+                      if (!discardMode) onCardClick(card.resource);
+                    }}
+                    className="rounded-lg shadow-lg border border-white/20 flex flex-col items-center justify-center select-none cursor-pointer transition-all duration-200 hover:shadow-xl"
+                    style={{
+                      width: 52,
+                      height: 75,
+                      transform: selected ? 'translateY(-14px)' : undefined,
+                      zIndex: i,
+                      position: 'relative',
+                    }}
+                    onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.transform = 'translateY(-8px)'; }}
+                    onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.transform = ''; }}
+                    title={t(`resources.${card.resource}`)}
+                  >
+                    <SpriteImage src={RESOURCE_CARD_SPRITES[card.resource]} fallback={<span className="text-[20px] leading-none">{RESOURCE_ICONS[card.resource as keyof typeof RESOURCE_ICONS]}</span>} className="w-full h-full object-fill pointer-events-none rounded-lg" />
+                  </button>
+                </div>
+              );
+            })}
+
+            {totalCards === 0 && (
+              <div className="text-gray-500 text-sm italic pb-4">{t('trade.noResources', 'No resources')}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Dev cards — to the right of resource cards, stacked by type */}
+        {developmentCards.length > 0 && (
+          <div className="flex items-end gap-1.5 relative">
+            {Object.entries(devCardGroups).map(([type, group]) => {
             const style = DEV_CARD_STYLES[type] || DEV_CARD_STYLES.knight;
             const i18nKey = DEV_CARD_I18N[type] || type;
             const isVP = type === 'victory_point';
@@ -129,15 +208,16 @@ export function PlayerHand({
                   }
                 }}
                 disabled={!canPlay}
-                className={`relative rounded-lg border-2 ${style.color} ${style.border} flex flex-col items-center justify-center shadow-lg select-none transition-transform duration-150
-                  ${canPlay ? 'cursor-pointer hover:-translate-y-2 hover:shadow-xl' : 'opacity-60 cursor-default'}`}
-                style={{ width: 48, height: 68 }}
+                className={`relative rounded-lg border ${canPlay ? 'border-white/30 cursor-pointer hover:-translate-y-2 hover:shadow-xl' : 'border-white/10 opacity-60 cursor-default'} flex flex-col items-center justify-center shadow-lg select-none transition-transform duration-150`}
+                style={{ width: 48, height: 76 }}
                 title={`${t(`devCards.${i18nKey}`)}${count > 1 ? ` (×${count})` : ''}${isVP ? ' (auto-scored)' : canPlay ? ' — click to play' : !isMyTurn ? ' — not your turn' : devCardPlayedThisTurn ? ' — already played one this turn' : ' — bought this turn'}`}
               >
-                <span className="text-lg leading-none">{style.icon}</span>
-                <span className="text-[9px] text-white/80 font-semibold mt-0.5 leading-tight text-center">
-                  {style.label}
-                </span>
+                <SpriteImage 
+                  src={style.sprite} 
+                  fallback={<span className="text-lg leading-none">{style.fallback}</span>}
+                  alt={style.label} 
+                  className="w-full h-full object-fill pointer-events-none" 
+                />
                 {count > 1 && (
                   <span className="absolute -top-1.5 -right-1.5 bg-white text-gray-900 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">
                     {count}
@@ -179,7 +259,7 @@ export function PlayerHand({
                         ${(pendingCard === 'year_of_plenty' ? selectedResources.length < 2 : true) ? 'border-gray-500 hover:border-white hover:bg-gray-700 cursor-pointer' : 'border-gray-700 opacity-40 cursor-default'}
                         ${selected > 0 ? 'bg-gray-700 border-white ring-1 ring-white/40' : ''}`}
                     >
-                      <span className="text-lg">{RESOURCE_ICONS[r]}</span>
+                    <SpriteImage src={RESOURCE_SPRITES[r]} fallback={<span className="text-[14px] leading-none">{RESOURCE_ICONS[r as keyof typeof RESOURCE_ICONS]}</span>} className="w-5 h-5 object-contain pointer-events-none" />
                       <span className="text-[10px] text-gray-300">{t(`resources.${r}`)}</span>
                       {selected > 0 && <span className="text-[9px] text-yellow-400 font-bold">×{selected}</span>}
                     </button>
@@ -213,66 +293,6 @@ export function PlayerHand({
         </div>
       )}
 
-      {/* Resource cards — horizontal line with overlap */}
-      <div className="pointer-events-auto flex justify-center pb-2 px-4" style={{ minHeight: 90 }}>
-        <div className="flex justify-center">
-          {cards.map((card, i) => {
-            const key = `${card.resource}-${card.index}`;
-            const selected = selectedForTrade.includes(key);
-
-            return (
-              <div
-                key={key}
-                className="transition-all duration-200"
-                style={{ marginLeft: i === 0 ? 0 : -28 }}
-              >
-                <button
-                  onClick={() => {
-                    setSelectedForTrade((prev) => {
-                      const isSelected = prev.includes(key);
-                      // In discard mode, cap the selection at discardMax
-                      if (!isSelected && discardMode && discardMax != null) {
-                        const currentCount = prev.length;
-                        if (currentCount >= discardMax) return prev;
-                      }
-                      const next = isSelected ? prev.filter((k) => k !== key) : [...prev, key];
-                      // Compute resource counts from selection
-                      if (onSelectionChange) {
-                        const counts: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
-                        for (const k of next) {
-                          const res = k.split('-')[0];
-                          counts[res] = (counts[res] || 0) + 1;
-                        }
-                        onSelectionChange(counts);
-                      }
-                      return next;
-                    });
-                    if (!discardMode) onCardClick(card.resource);
-                  }}
-                  className="rounded-lg shadow-lg border-2 border-white/20 flex flex-col items-center justify-center select-none cursor-pointer transition-all duration-200 hover:-translate-y-2 hover:shadow-xl"
-                  style={{
-                    width: 52,
-                    height: 75,
-                    backgroundColor: RESOURCE_COLORS[card.resource],
-                    transform: selected ? 'translateY(-14px)' : 'translateY(0)',
-                    zIndex: i,
-                    position: 'relative',
-                  }}
-                  title={t(`resources.${card.resource}`)}
-                >
-                  <span className="text-xl leading-none">{RESOURCE_ICONS[card.resource]}</span>
-                  <span className="text-[10px] text-white/80 font-semibold mt-1">
-                    {t(`resources.${card.resource}`)}
-                  </span>
-                </button>
-              </div>
-            );
-          })}
-
-          {totalCards === 0 && (
-            <div className="text-gray-500 text-sm italic pb-4">{t('trade.noResources', 'No resources')}</div>
-          )}
-        </div>
       </div>
     </div>
   );

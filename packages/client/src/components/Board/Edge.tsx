@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { vertexToPixel, edgeAdjacentVertices, type EdgeDirection } from '@brolonist/shared';
 
 const PLAYER_COLORS: Record<string, string> = {
@@ -12,29 +13,52 @@ interface EdgeProps {
   building?: { type: string; playerId: string; color: string } | null;
   validPlacement?: boolean;
   ghost?: { color: string } | null;
+  hoverGhostColor?: string | null;
+  showDot?: boolean;
   onClick?: () => void;
 }
 
-export function Edge({ hex, direction, size, building, validPlacement, ghost, onClick }: EdgeProps) {
+export function Edge({ hex, direction, size, building, validPlacement, ghost, hoverGhostColor, showDot, onClick }: EdgeProps) {
   const [v1, v2] = edgeAdjacentVertices({ hex, direction });
   const p1 = vertexToPixel(v1, size);
   const p2 = vertexToPixel(v2, size);
   const hitWidth = size * 0.3;
+  const [hovered, setHovered] = useState(false);
 
   if (building) {
     const color = PLAYER_COLORS[building.color] || '#999';
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const mx = (p1.x + p2.x) / 2;
+    const my = (p1.y + p2.y) / 2;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const displayLength = length * 0.8;
+
     return (
-      <line
-        x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-        stroke={color} strokeWidth={size * 0.12}
-        strokeLinecap="round"
-      />
+      <g pointerEvents="none">
+        <image
+          href={`/assets/sprites/road-${building.color}.png`}
+          x={mx - displayLength / 2}
+          y={my - length / 2}
+          width={displayLength}
+          height={length}
+          transform={`rotate(${angle}, ${mx}, ${my})`}
+        />
+      </g>
     );
   }
 
   // Ghost road preview
   if (ghost) {
     const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const mx = (p1.x + p2.x) / 2;
+    const my = (p1.y + p2.y) / 2;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
     return (
       <g className="cursor-pointer" onClick={onClick}>
         <line
@@ -42,11 +66,14 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, on
           stroke="transparent" strokeWidth={hitWidth}
           strokeLinecap="round"
         />
-        <line
-          x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-          stroke={ghostColor} strokeWidth={size * 0.12}
-          strokeLinecap="round" strokeOpacity={0.5}
-          strokeDasharray={`${size * 0.1} ${size * 0.06}`}
+        <image
+          href={`/assets/sprites/road-${ghost.color}.png`}
+          x={mx - length / 2}
+          y={my - length / 2}
+          width={length}
+          height={length}
+          transform={`rotate(${angle}, ${mx}, ${my})`}
+          opacity={0.5}
           className="animate-pulse pointer-events-none"
         />
       </g>
@@ -54,19 +81,39 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, on
   }
 
   if (validPlacement) {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const mx = (p1.x + p2.x) / 2;
+    const my = (p1.y + p2.y) / 2;
+    const length = Math.sqrt(dx * dx + dy * dy);
     return (
-      <g className="cursor-pointer" onClick={onClick}>
+      <g className="cursor-pointer" onClick={onClick}
+        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
         <line
           x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
           stroke="transparent" strokeWidth={hitWidth}
           strokeLinecap="round"
         />
-        <line
-          x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-          stroke="#00ff88" strokeWidth={size * 0.08}
-          strokeLinecap="round" strokeOpacity={0.6}
-          className="pointer-events-none"
-        />
+        {hovered && hoverGhostColor ? (
+          <image
+            href={`/assets/sprites/road-${hoverGhostColor}.png`}
+            x={mx - length / 2}
+            y={my - length / 2}
+            width={length}
+            height={length}
+            transform={`rotate(${angle}, ${mx}, ${my})`}
+            opacity={0.4}
+            className="pointer-events-none"
+          />
+        ) : showDot ? (
+          <circle
+            cx={mx} cy={my} r={size * 0.08}
+            fill="#00ff88" fillOpacity={0.6}
+            stroke="#00ff88" strokeWidth={1}
+            className="pointer-events-none"
+          />
+        ) : null}
       </g>
     );
   }

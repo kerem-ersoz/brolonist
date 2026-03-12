@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { vertexToPixel, type VertexDirection } from '@brolonist/shared';
 
 const PLAYER_COLORS: Record<string, string> = {
@@ -12,24 +13,30 @@ interface VertexProps {
   building?: { type: string; playerId: string; color: string } | null;
   validPlacement?: boolean;
   ghost?: { type: 'settlement' | 'city'; color: string } | null;
+  hoverGhostColor?: string | null;
+  showDot?: boolean;
   onClick?: () => void;
 }
 
-export function Vertex({ hex, direction, size, building, validPlacement, ghost, onClick }: VertexProps) {
+export function Vertex({ hex, direction, size, building, validPlacement, ghost, hoverGhostColor, showDot, onClick }: VertexProps) {
   const pos = vertexToPixel({ hex, direction }, size);
   const r = size * 0.18;
   const hitR = size * 0.35;
+  const [hovered, setHovered] = useState(false);
 
   if (building) {
     const color = PLAYER_COLORS[building.color] || '#999';
     if (building.type === 'city') {
       return (
-        <rect
-          x={pos.x - r * 1.2} y={pos.y - r * 1.2}
-          width={r * 2.4} height={r * 2.4}
-          fill={color} stroke="#000" strokeWidth={1}
-          rx={2}
-        />
+        <g pointerEvents="none">
+          <image
+            href={`/assets/sprites/city-${building.color}.png`}
+            x={pos.x - r * 3.375}
+            y={pos.y - r * 3.375}
+            width={r * 6.75}
+            height={r * 6.75}
+          />
+        </g>
       );
     }
     // Existing settlement — if ghost city upgrade, overlay the ghost
@@ -37,20 +44,18 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
       const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
       return (
         <g className="cursor-pointer" onClick={onClick}>
-          <circle cx={pos.x} cy={pos.y} r={r} fill={color} stroke="#000" strokeWidth={1} />
-          <rect
-            x={pos.x - r * 1.2} y={pos.y - r * 1.2}
-            width={r * 2.4} height={r * 2.4}
-            fill={ghostColor} fillOpacity={0.5}
-            stroke={ghostColor} strokeWidth={2}
-            strokeDasharray="4 2"
-            rx={2}
-            className="animate-pulse"
-          />
+          <image href={`/assets/sprites/settlement-${building.color}.png`} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} />
+          <image href={`/assets/sprites/city-${ghost.color}.png`} x={pos.x - r * 3.375} y={pos.y - r * 3.375} width={r * 6.75} height={r * 6.75} opacity={0.5} className="animate-pulse" />
         </g>
       );
     }
-    return <circle cx={pos.x} cy={pos.y} r={r} fill={color} stroke="#000" strokeWidth={1} />;
+    // Existing settlement — clickable for city upgrade during build phase
+    return (
+      <g className={onClick ? 'cursor-pointer' : undefined} onClick={onClick} pointerEvents={onClick ? undefined : 'none'}>
+        {onClick && <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />}
+        <image href={`/assets/sprites/settlement-${building.color}.png`} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} />
+      </g>
+    );
   }
 
   // Ghost settlement (no existing building)
@@ -59,11 +64,13 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
     return (
       <g className="cursor-pointer" onClick={onClick}>
         <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
-        <circle
-          cx={pos.x} cy={pos.y} r={r}
-          fill={ghostColor} fillOpacity={0.5}
-          stroke={ghostColor} strokeWidth={2}
-          strokeDasharray="4 2"
+        <image
+          href={`/assets/sprites/settlement-${ghost.color}.png`}
+          x={pos.x - r * 3.6}
+          y={pos.y - r * 3.6}
+          width={r * 7.2}
+          height={r * 7.2}
+          opacity={0.5}
           className="animate-pulse pointer-events-none"
         />
       </g>
@@ -72,14 +79,27 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
 
   if (validPlacement) {
     return (
-      <g className="cursor-pointer" onClick={onClick}>
+      <g className="cursor-pointer" onClick={onClick}
+        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
         <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
-        <circle
-          cx={pos.x} cy={pos.y} r={r * 0.8}
-          fill="#00ff88" fillOpacity={0.5}
-          stroke="#00ff88" strokeWidth={1.5}
-          className="animate-pulse pointer-events-none"
-        />
+        {hovered && hoverGhostColor ? (
+          <image
+            href={`/assets/sprites/settlement-${hoverGhostColor}.png`}
+            x={pos.x - r * 3.6}
+            y={pos.y - r * 3.6}
+            width={r * 7.2}
+            height={r * 7.2}
+            opacity={0.4}
+            className="pointer-events-none"
+          />
+        ) : showDot ? (
+          <circle
+            cx={pos.x} cy={pos.y} r={r * 0.6}
+            fill="#00ff88" fillOpacity={0.6}
+            stroke="#00ff88" strokeWidth={1}
+            className="pointer-events-none"
+          />
+        ) : null}
       </g>
     );
   }

@@ -22,6 +22,8 @@ import { Navbar } from '../Layout/Navbar';
 import { GameWaitingRoom } from '../Lobby/GameWaitingRoom';
 import { DevPanel } from './DevPanel';
 import { DiscardPanel } from './DiscardPanel';
+import { VictoryModal } from './VictoryModal';
+import { StealPicker } from './StealPicker';
 
 class GameErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -79,6 +81,21 @@ function GamePageInner() {
   const [buildMode, setBuildMode] = useState<'road' | 'settlement' | 'city' | null>(null);
   const [handSelection, setHandSelection] = useState<Record<string, number>>({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });
   const [clearSelectionCounter, setClearSelectionCounter] = useState(0);
+  const [rolledNumber, setRolledNumber] = useState<number | null>(null);
+
+  // Track dice rolls for number tile illumination
+  const prevDiceRef = useRef<string>('');
+  useEffect(() => {
+    if (!gameState?.dice) return;
+    const diceKey = `${gameState.dice[0]},${gameState.dice[1]}`;
+    if (diceKey !== prevDiceRef.current && gameState.dice[0] > 0) {
+      prevDiceRef.current = diceKey;
+      const sum = gameState.dice[0] + gameState.dice[1];
+      setRolledNumber(sum);
+      const timer = setTimeout(() => setRolledNumber(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState?.dice]);
 
   // Ghost placement state: first click sets ghost, second click confirms
   const [ghostPlacement, setGhostPlacement] = useState<{
@@ -137,6 +154,50 @@ function GamePageInner() {
           });
         }
       }
+
+      // Steal animations — card flies from victim to thief
+      if (entry.type === 'steal' && entry.data && entry.playerId) {
+        const thiefId = entry.playerId;
+        const victimId = entry.data.victimId as string;
+        const resource = entry.data.resource as string;
+        if (thiefId === myPlayerId || victimId === myPlayerId) {
+          const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+          if (resource) resources[resource] = 1;
+          newItems.push({
+            kind: 'trade',
+            id: `${entry.timestamp}-steal`,
+            fromPlayerId: victimId,  // victim "gives"
+            toPlayerId: thiefId,     // thief "receives"
+            offering: resources,     // what victim loses
+            requesting: {},          // thief gives nothing
+            myPlayerId,
+            isSteal: true,
+          });
+        }
+      }
+
+      // Monopoly animations — cards fly from each victim to the monopoly player
+      if (entry.type === 'monopoly' && entry.data && entry.playerId) {
+        const monopolist = entry.playerId;
+        const resourceType = entry.data.resourceType as string;
+        const perPlayer = entry.data.perPlayer as Record<string, number>;
+        if (monopolist === myPlayerId || (perPlayer && Object.keys(perPlayer).includes(myPlayerId))) {
+          for (const [victimId, amount] of Object.entries(perPlayer || {})) {
+            if (amount <= 0) continue;
+            const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+            resources[resourceType] = amount;
+            newItems.push({
+              kind: 'trade',
+              id: `${entry.timestamp}-monopoly-${victimId}`,
+              fromPlayerId: victimId,
+              toPlayerId: monopolist,
+              offering: resources,
+              requesting: {},
+              myPlayerId,
+            });
+          }
+        }
+      }
     }
 
     if (newItems.length > 0) {
@@ -147,6 +208,26 @@ function GamePageInner() {
   const handleAnimationComplete = useCallback((id: string) => {
     setAnimationItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
+
+  // Compute display resources: subtract pending incoming resources that are still animating
+  const pendingIncoming = useMemo(() => {
+    const pending: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    for (const item of animationItems) {
+      if (item.kind === 'distribute' && item.isMe) {
+        for (const [res, count] of Object.entries(item.resources)) {
+          pending[res] = (pending[res] || 0) + count;
+        }
+      } else if (item.kind === 'trade') {
+        const iAmFrom = item.fromPlayerId === item.myPlayerId;
+        // Resources I receive during this trade
+        const myReceiving = iAmFrom ? item.requesting : item.offering;
+        for (const [res, count] of Object.entries(myReceiving)) {
+          if (count > 0) pending[res] = (pending[res] || 0) + count;
+        }
+      }
+    }
+    return pending;
+  }, [animationItems]);
 
   const phase = gameState?.currentPhase || '';
   const isSetup = phase === 'setup_forward' || phase === 'setup_reverse';
@@ -178,16 +259,33 @@ function GamePageInner() {
   const canBuild = myTurn && (phase === 'trade_and_build' || phase === 'special_build');
 
   // Compute valid placement highlights to show on the board
-  // Green highlights only during setup. During build phases, spots are clickable but invisible.
+  // Show during setup phases AND during normal build phases (trade_and_build)
   const validSettlements = useMemo(() => {
     if (!gameState || !myPlayerId) return [];
 
-    // Setup: show settlement spots with green highlights
-    if (effectiveBuildMode === 'settlement') {
+    // Setup or explicit settlement mode or general build phase (for hover ghosts)
+    if (effectiveBuildMode === 'settlement' || (canBuild && !effectiveBuildMode)) {
+      const board = gameState.board as BoardType;
+      // Build set of terrain hex keys for adjacency check
+      const terrainSet = new Set(board.hexes.map(h => `${h.coord.q},${h.coord.r}`));
+      const allCoords = [
+        ...board.hexes.map(h => h.coord),
+        ...(board.waterHexes || []),
+      ];
+      const seen = new Set<string>();
       const verts: Array<{ hex: HexCoord; direction: VertexDirection }> = [];
-      for (const hex of (gameState.board as BoardType).hexes) {
+      for (const coord of allCoords) {
         for (const dir of ['N', 'S'] as VertexDirection[]) {
-          verts.push({ hex: hex.coord, direction: dir });
+          const key = `${coord.q},${coord.r},${dir}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          // Check that at least one adjacent hex is terrain
+          const adjHexes = dir === 'N'
+            ? [{ q: coord.q, r: coord.r }, { q: coord.q, r: coord.r - 1 }, { q: coord.q + 1, r: coord.r - 1 }]
+            : [{ q: coord.q, r: coord.r }, { q: coord.q, r: coord.r + 1 }, { q: coord.q - 1, r: coord.r + 1 }];
+          if (adjHexes.some(h => terrainSet.has(`${h.q},${h.r}`))) {
+            verts.push({ hex: coord, direction: dir });
+          }
         }
       }
       return verts;
@@ -217,22 +315,26 @@ function GamePageInner() {
     }
 
     return [];
-  }, [gameState, myPlayerId, effectiveBuildMode]);
+  }, [gameState, myPlayerId, effectiveBuildMode, canBuild]);
 
   const validRoads = useMemo(() => {
     if (!gameState || !myPlayerId) return [];
-    // Green highlights only during setup road phase
-    if (effectiveBuildMode === 'road') {
+    if (effectiveBuildMode === 'road' || (canBuild && !effectiveBuildMode)) {
+      const board = gameState.board as BoardType;
+      const allCoords = [
+        ...board.hexes.map(h => h.coord),
+        ...(board.waterHexes || []),
+      ];
       const edges: Array<{ hex: HexCoord; direction: EdgeDirection }> = [];
-      for (const hex of (gameState.board as BoardType).hexes) {
+      for (const coord of allCoords) {
         for (const dir of ['NE', 'E', 'SE'] as EdgeDirection[]) {
-          edges.push({ hex: hex.coord, direction: dir });
+          edges.push({ hex: coord, direction: dir });
         }
       }
       return edges;
     }
     return [];
-  }, [gameState, myPlayerId, effectiveBuildMode]);
+  }, [gameState, myPlayerId, effectiveBuildMode, canBuild]);
 
   const validRobberHexes = useMemo(() => {
     if (!gameState || effectiveBuildMode !== 'robber') return [];
@@ -461,21 +563,7 @@ function GamePageInner() {
 
   // --- Early returns (no hooks below this point) ---
 
-  // Game over screen
-  if (gameResult) {
-    return (
-      <div className="h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
-        <div className="text-6xl mb-6">🏆</div>
-        <h1 className="text-3xl font-bold mb-2">
-          {gameResult.winnerId === myPlayerId ? 'You won!' : (gameResult.winnerName || 'Game Over')}
-        </h1>
-        <p className="text-gray-400 mb-8">Victory Points: {gameResult.victoryPoints}</p>
-        <button onClick={() => { window.location.href = '/'; }} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold">
-          {t('common.back')}
-        </button>
-      </div>
-    );
-  }
+  // Game over — no longer an early return; VictoryModal renders as overlay below
 
   if (!gameState) {
     if (connectionStatus === 'connected' && currentLobby && myPlayerId) {
@@ -530,7 +618,7 @@ function GamePageInner() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900">
+    <div className="h-screen flex flex-col">
       <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
 
       {/* Phase hint banner */}
@@ -550,7 +638,10 @@ function GamePageInner() {
             validRoads={validRoads}
             validRobberHexes={validRobberHexes}
             ghost={boardGhost}
+            myColor={me?.color}
+            showDots={!!effectiveBuildMode && effectiveBuildMode !== 'robber'}
             buildPhaseActive={canBuild}
+            rolledNumber={rolledNumber}
             onVertexClick={handleVertexClick}
             onEdgeClick={handleEdgeClick}
             onHexClick={handleHexClick}
@@ -560,7 +651,11 @@ function GamePageInner() {
         playerHand={
           me ? (
             <PlayerHand
-              resources={me.resources as unknown as Record<string, number>}
+              resources={Object.fromEntries(
+                Object.entries(me.resources as unknown as Record<string, number>).map(
+                  ([r, count]) => [r, Math.max(0, count - (pendingIncoming[r] || 0))]
+                )
+              )}
               developmentCards={me.developmentCards as Array<{ type: string; turnPurchased?: number }>}
               turnNumber={gameState.turnNumber}
               isMyTurn={myTurn}
@@ -584,16 +679,70 @@ function GamePageInner() {
             : gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null
         }
         endTurnButton={
-          <button
-            onClick={canEndTurn ? handleEndTurn : undefined}
-            disabled={!canEndTurn}
-            className={`rounded-lg font-semibold shadow-lg pointer-events-auto flex items-center justify-center transition-colors ${
-              canEndTurn ? 'bg-red-700 hover:bg-red-600 text-white cursor-pointer' : 'bg-gray-700 text-gray-500 cursor-default'
-            }`}
-            style={{ width: '9rem', height: '9rem', fontSize: '5rem' }}
-          >
-            ⏩
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={canBuild ? () => setBuildMode(buildMode === 'road' ? null : 'road') : undefined}
+              disabled={!canBuild}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+                buildMode === 'road' ? 'ring-2 ring-yellow-300 brightness-125 cursor-pointer' :
+                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+              }`}
+              style={{ width: '4.25rem', height: '4.25rem' }}
+              title="Build Road"
+            >
+              <img src="/assets/sprites/road-white.png" alt="Road" className="w-full h-full object-contain" />
+            </button>
+            <button
+              onClick={canBuild ? () => setBuildMode(buildMode === 'settlement' ? null : 'settlement') : undefined}
+              disabled={!canBuild}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+                buildMode === 'settlement' ? 'ring-2 ring-green-300 brightness-125 cursor-pointer' :
+                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+              }`}
+              style={{ width: '4.25rem', height: '4.25rem' }}
+              title="Build Settlement"
+            >
+              <img src="/assets/sprites/settlement-white.png" alt="Settlement" className="w-full h-full object-contain" />
+            </button>
+            <button
+              onClick={canBuild ? () => setBuildMode(buildMode === 'city' ? null : 'city') : undefined}
+              disabled={!canBuild}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+                buildMode === 'city' ? 'ring-2 ring-blue-300 brightness-125 cursor-pointer' :
+                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+              }`}
+              style={{ width: '4.25rem', height: '4.25rem' }}
+              title="Build City"
+            >
+              <img src="/assets/sprites/city-white.png" alt="City" className="w-full h-full object-contain" />
+            </button>
+            <button
+              onClick={canBuyDevCard ? handleBuyDevCard : undefined}
+              disabled={!canBuyDevCard}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden relative ${
+                canBuyDevCard ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+              }`}
+              style={{ width: '4.25rem', height: '4.25rem' }}
+              title="Buy Dev Card"
+            >
+              <div className="relative" style={{ width: '52%', height: '52%' }}>
+                <img src="/assets/sprites/dev-card-back.png" alt="" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(-15deg) translateX(-20%)' }} />
+                <img src="/assets/sprites/dev-card-back.png" alt="" className="absolute inset-0 w-full h-full object-contain" />
+                <img src="/assets/sprites/dev-card-back.png" alt="Dev Card" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(15deg) translateX(20%)' }} />
+              </div>
+            </button>
+            <button
+              onClick={canEndTurn ? handleEndTurn : undefined}
+              disabled={!canEndTurn}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+                canEndTurn ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+              }`}
+              style={{ width: '4.25rem', height: '4.25rem' }}
+              title="End Turn"
+            >
+              <img src="/assets/sprites/skip-button.png" alt="End Turn" className="w-full h-full object-contain" />
+            </button>
+          </div>
         }
         rightPanel={
           <RightSidebar
@@ -677,7 +826,31 @@ function GamePageInner() {
       )}
 
       {/* Dev panel (development only) */}
-      {import.meta.env.DEV && <DevPanel sendMessage={sendMessage} />}
+      {import.meta.env.DEV && <DevPanel sendMessage={sendMessage} players={gameState?.players.map(p => ({ id: p.id, name: p.name, color: p.color }))} myPlayerId={myPlayerId ?? undefined} />}
+
+      {/* Steal victim picker */}
+      {gameState && myTurn && (gameState.pendingStealTargets as string[] | undefined)?.length && (
+        <StealPicker
+          targets={(gameState.pendingStealTargets as string[]).map(id => {
+            const p = gameState.players.find(pl => pl.id === id);
+            return { id, name: p?.name || 'Unknown', color: p?.color || 'gray' };
+          })}
+          onPick={(victimId) => sendMessage('steal_from', { victimId })}
+        />
+      )}
+
+      {/* Victory modal overlay */}
+      {gameResult && (
+        <VictoryModal
+          winnerId={gameResult.winnerId}
+          winnerName={gameResult.winnerName}
+          winnerColor={gameResult.winnerColor}
+          victoryPoints={gameResult.victoryPoints}
+          standings={gameResult.standings}
+          myPlayerId={myPlayerId}
+          onHome={() => { window.location.href = '/'; }}
+        />
+      )}
     </div>
   );
 }

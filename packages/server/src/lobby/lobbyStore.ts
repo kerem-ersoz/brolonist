@@ -170,7 +170,7 @@ export function updateLobbyConfig(
     game.config.turnTimerSeconds = updates.turnTimerSeconds;
   }
   if (updates.mapType !== undefined) {
-    const validMaps = ['standard', 'random', 'pangaea', 'archipelago', 'rich_coast', 'desert_ring'];
+    const validMaps = ['standard', 'random', 'pangaea', 'archipelago', 'rich_coast', 'desert_ring', 'turkey', 'world'];
     if (validMaps.includes(updates.mapType)) {
       game.config.mapType = updates.mapType;
     }

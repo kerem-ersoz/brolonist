@@ -28,7 +28,10 @@ interface BoardProps {
   validRoads?: Array<{ hex: HexCoord; direction: EdgeDirection }>;
   validRobberHexes?: Array<HexCoord>;
   ghost?: GhostPlacement | null;
+  myColor?: string | null;
+  showDots?: boolean;
   buildPhaseActive?: boolean;
+  rolledNumber?: number | null;
   onVertexClick?: (vertex: { hex: HexCoord; direction: VertexDirection }) => void;
   onEdgeClick?: (edge: { hex: HexCoord; direction: EdgeDirection }) => void;
   onHexClick?: (hex: HexCoord) => void;
@@ -38,7 +41,7 @@ interface BoardProps {
 export function Board({
   board, robberPosition, players, size = 50,
   validSettlements = [], validRoads = [], validRobberHexes = [],
-  ghost, buildPhaseActive,
+  ghost, myColor, showDots, buildPhaseActive, rolledNumber,
   onVertexClick, onEdgeClick, onHexClick, onBackgroundClick,
 }: BoardProps) {
   const viewBox = useMemo(() => {
@@ -174,6 +177,7 @@ export function Board({
           numberToken={hex.numberToken}
           size={size}
           hasRobber={hex.coord.q === robberPosition.q && hex.coord.r === robberPosition.r}
+          illuminated={rolledNumber != null && hex.numberToken === rolledNumber}
           highlighted={isValidRobberHex(hex.coord.q, hex.coord.r)}
           onClick={
             isValidRobberHex(hex.coord.q, hex.coord.r)
@@ -187,50 +191,68 @@ export function Board({
 
       {/* Harbors */}
       {board.harbors?.map((h, i) => (
-        <Harbor key={`hb${i}`} position={h.position} type={h.type} size={size} />
+        <Harbor key={`hb${i}`} position={h.position} vertices={h.vertices} type={h.type} size={size} />
       ))}
 
-      {/* Edges (roads) */}
-      {board.hexes?.map(hex =>
+      {/* Edges (roads) — built roads rendered first */}
+      {[...board.hexes.map(h => h.coord), ...(board.waterHexes || [])].map(coord =>
         edgeDirs.map(dir => {
-          const building = getEdgeBuilding(hex.coord.q, hex.coord.r, dir);
-          const valid = isValidRoad(hex.coord.q, hex.coord.r, dir);
-          const edgeGhost = getEdgeGhost(hex.coord.q, hex.coord.r, dir);
+          const building = getEdgeBuilding(coord.q, coord.r, dir);
+          const valid = isValidRoad(coord.q, coord.r, dir);
+          const edgeGhost = getEdgeGhost(coord.q, coord.r, dir);
           const edgeClickable = valid || edgeGhost || buildPhaseActive;
           if (!building && !edgeClickable) return null;
           return (
             <Edge
-              key={`e${hex.coord.q},${hex.coord.r},${dir}`}
-              hex={hex.coord} direction={dir} size={size}
+              key={`e${coord.q},${coord.r},${dir}`}
+              hex={coord} direction={dir} size={size}
               building={building}
               validPlacement={valid && !edgeGhost}
               ghost={edgeGhost}
-              onClick={edgeClickable ? () => onEdgeClick?.({ hex: hex.coord, direction: dir }) : undefined}
+              hoverGhostColor={myColor}
+              showDot={showDots}
+              onClick={edgeClickable ? () => onEdgeClick?.({ hex: coord, direction: dir }) : undefined}
             />
           );
         })
       )}
 
-      {/* Vertices (settlements/cities) */}
-      {board.hexes?.map(hex =>
-        vertexDirs.map(dir => {
-          const building = getVertexBuilding(hex.coord.q, hex.coord.r, dir);
-          const valid = isValidSettlement(hex.coord.q, hex.coord.r, dir);
-          const vertGhost = getVertexGhost(hex.coord.q, hex.coord.r, dir);
-          const vertClickable = valid || vertGhost || buildPhaseActive;
-          if (!building && !vertClickable) return null;
-          return (
-            <Vertex
-              key={`v${hex.coord.q},${hex.coord.r},${dir}`}
-              hex={hex.coord} direction={dir} size={size}
-              building={building}
-              validPlacement={valid && !vertGhost}
-              ghost={vertGhost}
-              onClick={vertClickable ? () => onVertexClick?.({ hex: hex.coord, direction: dir }) : undefined}
-            />
-          );
-        })
-      )}
+      {/* Vertices (settlements/cities) — terrain + water hexes, filtered to terrain-adjacent */}
+      {(() => {
+        const terrainSet = new Set(board.hexes.map(h => `${h.coord.q},${h.coord.r}`));
+        const allCoords = [...board.hexes.map(h => h.coord), ...(board.waterHexes || [])];
+        const seen = new Set<string>();
+        return allCoords.flatMap(coord =>
+          vertexDirs.map(dir => {
+            const key = `${coord.q},${coord.r},${dir}`;
+            if (seen.has(key)) return null;
+            seen.add(key);
+            // Only render vertices adjacent to at least one terrain hex
+            const adjHexes = dir === VertexDirection.N
+              ? [{ q: coord.q, r: coord.r }, { q: coord.q, r: coord.r - 1 }, { q: coord.q + 1, r: coord.r - 1 }]
+              : [{ q: coord.q, r: coord.r }, { q: coord.q, r: coord.r + 1 }, { q: coord.q - 1, r: coord.r + 1 }];
+            if (!adjHexes.some(h => terrainSet.has(`${h.q},${h.r}`))) return null;
+
+            const building = getVertexBuilding(coord.q, coord.r, dir);
+            const valid = isValidSettlement(coord.q, coord.r, dir);
+            const vertGhost = getVertexGhost(coord.q, coord.r, dir);
+            const vertClickable = valid || vertGhost || buildPhaseActive;
+            if (!building && !vertClickable) return null;
+            return (
+              <Vertex
+                key={`v${coord.q},${coord.r},${dir}`}
+                hex={coord} direction={dir} size={size}
+                building={building}
+                validPlacement={valid && !vertGhost}
+                ghost={vertGhost}
+                hoverGhostColor={myColor}
+                showDot={showDots}
+                onClick={vertClickable ? () => onVertexClick?.({ hex: coord, direction: dir }) : undefined}
+              />
+            );
+          })
+        );
+      })()}
 
       {/* Robber overlay */}
       <Robber hex={robberPosition} size={size} />

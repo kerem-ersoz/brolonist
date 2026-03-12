@@ -1,3 +1,6 @@
+import { SpriteImage } from '../Sprites/SpriteImage';
+import { ICONS } from '../../utils/sprites';
+
 interface BankDisplayProps {
   deckSize: number;
   players: Array<{
@@ -11,12 +14,20 @@ const BANK_TOTAL_PER_RESOURCE = 19;
 
 const RESOURCE_ORDER = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
 
-const RESOURCE_STYLES: Record<string, { bg: string; icon: string }> = {
-  brick: { bg: 'bg-red-800', icon: '🧱' },
-  lumber: { bg: 'bg-green-800', icon: '🪵' },
-  ore: { bg: 'bg-gray-600', icon: '⛏️' },
-  grain: { bg: 'bg-yellow-700', icon: '🌾' },
-  wool: { bg: 'bg-lime-700', icon: '🐑' },
+const RESOURCE_CARD_SPRITES: Record<string, string> = {
+  brick: '/assets/sprites/card-brick.png',
+  lumber: '/assets/sprites/card-wood.png',
+  ore: '/assets/sprites/card-ore.png',
+  grain: '/assets/sprites/card-grain.png',
+  wool: '/assets/sprites/card-sheep.png',
+};
+
+const RESOURCE_FALLBACKS: Record<string, string> = {
+  brick: '🧱',
+  lumber: '🪵',
+  ore: '⛏️',
+  grain: '🌾',
+  wool: '🐑',
 };
 
 export function BankDisplay({ deckSize, players }: BankDisplayProps) {
@@ -31,11 +42,15 @@ export function BankDisplay({ deckSize, players }: BankDisplayProps) {
   }
 
   return (
-    <div data-bank-display className="flex items-center justify-center gap-1.5 px-2 py-2 bg-gray-800/60 border-y border-gray-700/50">
+    <div data-bank-display className="flex items-center justify-center gap-1.5 px-2 py-2 border-y border-white/10" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
       {/* Dev card stack */}
       <div className="flex flex-col items-center">
-        <div className="w-9 h-12 rounded bg-purple-900 border border-purple-500/40 flex items-center justify-center shadow-sm">
-          <span className="text-sm">📜</span>
+        <div className="w-9 h-12 rounded overflow-hidden border border-white/10 shadow-sm">
+          <SpriteImage
+            src={ICONS.cardDev}
+            fallback={<span className="text-sm">📜</span>}
+            className="w-full h-full object-fill"
+          />
         </div>
         <span className="text-[10px] text-gray-400 mt-0.5">{deckSize}</span>
       </div>
@@ -43,13 +58,14 @@ export function BankDisplay({ deckSize, players }: BankDisplayProps) {
       {/* Resource card stacks */}
       {RESOURCE_ORDER.map((r) => {
         const remaining = BANK_TOTAL_PER_RESOURCE - usedResources[r];
-        const style = RESOURCE_STYLES[r];
         return (
           <div key={r} className="flex flex-col items-center">
-            <div
-              className={`w-9 h-12 rounded ${style.bg} border border-white/10 flex items-center justify-center shadow-sm`}
-            >
-              <span className="text-sm">{style.icon}</span>
+            <div className="w-9 h-12 rounded overflow-hidden border border-white/10 shadow-sm">
+              <SpriteImage
+                src={RESOURCE_CARD_SPRITES[r]}
+                fallback={<span className="text-sm">{RESOURCE_FALLBACKS[r]}</span>}
+                className="w-full h-full object-fill"
+              />
             </div>
             <span className="text-[10px] text-gray-400 mt-0.5">{remaining}</span>
           </div>

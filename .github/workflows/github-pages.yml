@@ -39,6 +39,9 @@ jobs:
           VITE_BASE_PATH: /brolonist/
         run: npm run build -w packages/client
 
+      - name: SPA fallback for GitHub Pages
+        run: cp packages/client/dist/index.html packages/client/dist/404.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 

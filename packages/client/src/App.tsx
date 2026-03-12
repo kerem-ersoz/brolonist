@@ -11,8 +11,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
+  const basename = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><LobbyPage /></ProtectedRoute>} />

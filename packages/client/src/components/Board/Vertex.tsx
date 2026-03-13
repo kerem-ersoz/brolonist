@@ -22,7 +22,7 @@ interface VertexProps {
 export function Vertex({ hex, direction, size, building, validPlacement, ghost, hoverGhostColor, showDot, onClick }: VertexProps) {
   const pos = vertexToPixel({ hex, direction }, size);
   const r = size * 0.18;
-  const hitR = size * 0.35;
+  const hitR = size * 0.2;
   const [hovered, setHovered] = useState(false);
 
   if (building) {
@@ -45,8 +45,9 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
       const ghostColor = PLAYER_COLORS[ghost.color] || '#999';
       return (
         <g className="cursor-pointer" onClick={onClick}>
-          <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} />
-          <image href={assetPath(`assets/sprites/city-${ghost.color}.png`)} x={pos.x - r * 3.375} y={pos.y - r * 3.375} width={r * 6.75} height={r * 6.75} opacity={0.5} className="animate-pulse" />
+          <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />
+          <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 3.6} y={pos.y - r * 3.6} width={r * 7.2} height={r * 7.2} pointerEvents="none" />
+          <image href={assetPath(`assets/sprites/city-${ghost.color}.png`)} x={pos.x - r * 3.375} y={pos.y - r * 3.375} width={r * 6.75} height={r * 6.75} opacity={0.5} className="animate-pulse" pointerEvents="none" />
         </g>
       );
     }
@@ -54,7 +55,7 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
     return (
       <g className={onClick ? 'cursor-pointer' : undefined} onClick={onClick} pointerEvents={onClick ? undefined : 'none'} filter="url(#building-shadow)">
         {onClick && <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />}
-        <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 4.2} y={pos.y - r * 4.2} width={r * 8.4} height={r * 8.4} />
+        <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 4.2} y={pos.y - r * 4.2} width={r * 8.4} height={r * 8.4} pointerEvents="none" />
       </g>
     );
   }

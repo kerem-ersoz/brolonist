@@ -20,6 +20,18 @@ export function generateBoard(config: { playerCount: number; mapType: MapType })
   if (config.mapType === MapType.World) {
     return generateWorldBoard();
   }
+  if (config.mapType === MapType.Diamond) {
+    return generatePresetBoard(DIAMOND_HEXES, 9);
+  }
+  if (config.mapType === MapType.BritishIsles) {
+    return generatePresetBoard(BRITISH_ISLES_HEXES, 20);
+  }
+  if (config.mapType === MapType.Gear) {
+    return generatePresetBoard(GEAR_HEXES, 14);
+  }
+  if (config.mapType === MapType.Lakes) {
+    return generateLakesBoard();
+  }
 
   const pc = normalizePlayerCount(config.playerCount);
   const terrainHexes = generateHexGrid(pc);
@@ -896,6 +908,282 @@ function harborVertices(waterHex: HexCoord, landHex: HexCoord): [VertexId, Verte
     ],
   };
   return vertexPairs[dir] ?? vertexPairs[0];
+}
+
+// ---------------------------------------------------------------------------
+// Generic preset board generator
+// ---------------------------------------------------------------------------
+
+function generatePresetBoard(coords: HexCoord[], harborCount: number): Board {
+  const terrainHexes = [...coords];
+  const pool = generateTerrainPool(terrainHexes.length);
+  const hexes: HexTile[] = terrainHexes.map((coord, i) => ({
+    coord,
+    terrain: pool[i],
+    numberToken: null,
+  }));
+  generateNumberTokens(hexes);
+  const waterHexes = generateWaterFrame(terrainHexes);
+  const harbors = generateHarborsN(terrainHexes, waterHexes, harborCount);
+  return { hexes, waterHexes, harbors, vertexBuildings: new Map(), edgeBuildings: new Map() };
+}
+
+function generateTerrainPool(count: number): TerrainType[] {
+  // 1 desert per ~19 hexes, rest evenly split across 5 resource types
+  const desertCount = Math.max(1, Math.floor(count / 19));
+  const resourceCount = count - desertCount;
+  const perType = Math.floor(resourceCount / 5);
+  const remainder = resourceCount - perType * 5;
+  const types = [TerrainType.Hills, TerrainType.Forest, TerrainType.Mountains, TerrainType.Fields, TerrainType.Pasture];
+  const pool: TerrainType[] = [];
+  for (let t = 0; t < 5; t++) {
+    const extra = t < remainder ? 1 : 0;
+    for (let i = 0; i < perType + extra; i++) pool.push(types[t]);
+  }
+  for (let i = 0; i < desertCount; i++) pool.push(TerrainType.Desert);
+  // Fisher-Yates shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
+
+function generateHarborsN(terrain: HexCoord[], water: HexCoord[], count: number): Harbor[] {
+  // Reuse existing harbor generation but with a specific count
+  const terrainSet = new Set(terrain.map(h => `${h.q},${h.r}`));
+  const waterSet = new Set(water.map(h => `${h.q},${h.r}`));
+
+  // Find water hexes adjacent to terrain (edge water)
+  const edgeWater: { coord: HexCoord; angle: number }[] = [];
+  const cx = terrain.reduce((s, h) => s + h.q, 0) / terrain.length;
+  const cr = terrain.reduce((s, h) => s + h.r, 0) / terrain.length;
+  for (const w of water) {
+    const neighbors = hexNeighbors(w);
+    if (neighbors.some(n => terrainSet.has(`${n.q},${n.r}`))) {
+      const angle = Math.atan2(w.r - cr, w.q - cx);
+      edgeWater.push({ coord: w, angle });
+    }
+  }
+  edgeWater.sort((a, b) => a.angle - b.angle);
+
+  if (edgeWater.length === 0) return [];
+  const harborCount = Math.min(count, edgeWater.length);
+  const step = edgeWater.length / harborCount;
+
+  const specificTypes: HarborType[] = [
+    HarborType.Brick, HarborType.Lumber, HarborType.Ore, HarborType.Grain, HarborType.Wool,
+  ];
+  const harborTypes: HarborType[] = [];
+  for (let i = 0; i < harborCount; i++) {
+    harborTypes.push(i < specificTypes.length ? specificTypes[i] : HarborType.Generic);
+  }
+  // Shuffle
+  for (let i = harborTypes.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [harborTypes[i], harborTypes[j]] = [harborTypes[j], harborTypes[i]];
+  }
+
+  const harbors: Harbor[] = [];
+  for (let i = 0; i < harborCount; i++) {
+    const idx = Math.round(i * step) % edgeWater.length;
+    const wh = edgeWater[idx].coord;
+    const neighbors = hexNeighbors(wh);
+    const landNeighbor = neighbors.find(n => terrainSet.has(`${n.q},${n.r}`));
+    if (!landNeighbor) continue;
+
+    const dx = landNeighbor.q - wh.q;
+    const dr = landNeighbor.r - wh.r;
+    let facing = 0;
+    const dirs = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+    for (let d = 0; d < 6; d++) {
+      if (dirs[d][0] === dx && dirs[d][1] === dr) { facing = d; break; }
+    }
+
+    const vertexDirPairs: [VertexDirection, VertexDirection][] = [
+      [VertexDirection.N, VertexDirection.S],
+      [VertexDirection.N, VertexDirection.S],
+      [VertexDirection.N, VertexDirection.S],
+      [VertexDirection.N, VertexDirection.S],
+      [VertexDirection.N, VertexDirection.S],
+      [VertexDirection.N, VertexDirection.S],
+    ];
+    const verts = vertexDirPairs[facing];
+
+    harbors.push({
+      type: harborTypes[i],
+      position: wh,
+      facing,
+      vertices: [
+        { hex: landNeighbor, direction: verts[0] },
+        { hex: landNeighbor, direction: verts[1] },
+      ],
+    });
+  }
+
+  return harbors;
+}
+
+// ---------------------------------------------------------------------------
+// Diamond: 24-hex diamond shape, 9 harbors
+// ---------------------------------------------------------------------------
+
+const DIAMOND_HEXES: HexCoord[] = [
+  // Row by row, diamond shape (pointy-top)
+  // Top point
+  { q: 0, r: -3 },
+  // Row 2
+  { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 },
+  // Row 3
+  { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 },
+  // Row 4 (widest)
+  { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 },
+  // Row 5
+  { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 },
+  // Row 6
+  { q: 0, r: 2 }, { q: 1, r: 2 }, { q: 2, r: 2 },
+  // Row 7
+  { q: 1, r: 3 }, { q: 2, r: 3 },
+  // Bottom points
+  { q: 2, r: 4 },
+  { q: -2, r: -1 + 3 },
+];
+
+// ---------------------------------------------------------------------------
+// British Isles: 63 hexes shaped like UK + Ireland, 20 harbors
+// ---------------------------------------------------------------------------
+
+const BRITISH_ISLES_HEXES: HexCoord[] = (() => {
+  const coords: HexCoord[] = [];
+  const set = new Set<string>();
+  const add = (q: number, r: number) => {
+    const k = `${q},${r}`;
+    if (!set.has(k)) { set.add(k); coords.push({ q, r }); }
+  };
+
+  // Ireland (left island) — roughly centered at q=-5
+  // Northern Ireland  
+  add(-6, -2); add(-5, -2); add(-4, -2);
+  add(-7, -1); add(-6, -1); add(-5, -1); add(-4, -1);
+  add(-7, 0); add(-6, 0); add(-5, 0); add(-4, 0);
+  add(-6, 1); add(-5, 1); add(-4, 1);
+  add(-6, 2); add(-5, 2);
+
+  // Great Britain (right island)
+  // Scotland
+  add(-1, -5); add(0, -5);
+  add(-2, -4); add(-1, -4); add(0, -4); add(1, -4);
+  add(-2, -3); add(-1, -3); add(0, -3); add(1, -3);
+  // Northern England
+  add(-1, -2); add(0, -2); add(1, -2);
+  add(-1, -1); add(0, -1); add(1, -1); add(2, -1);
+  // Midlands
+  add(-1, 0); add(0, 0); add(1, 0); add(2, 0);
+  add(0, 1); add(1, 1); add(2, 1);
+  // Southern England  
+  add(0, 2); add(1, 2); add(2, 2); add(3, 2);
+  add(1, 3); add(2, 3); add(3, 3);
+  add(1, 4); add(2, 4); add(3, 4);
+  // Cornwall/Devon
+  add(2, 5); add(3, 5);
+  // Wales bulge
+  add(-1, 1); add(-2, 1); add(-2, 2);
+
+  return coords;
+})();
+
+// ---------------------------------------------------------------------------
+// Gear: 43-hex gear/cog shape with internal water cutouts, 14 harbors
+// ---------------------------------------------------------------------------
+
+const GEAR_HEXES: HexCoord[] = (() => {
+  const coords: HexCoord[] = [];
+  const set = new Set<string>();
+  const add = (q: number, r: number) => {
+    const k = `${q},${r}`;
+    if (!set.has(k)) { set.add(k); coords.push({ q, r }); }
+  };
+
+  // Core ring (radius 2)
+  for (let q = -2; q <= 2; q++) {
+    for (let r = -2; r <= 2; r++) {
+      if (Math.abs(q + r) <= 2) add(q, r);
+    }
+  }
+
+  // Remove some inner hexes to create gear holes
+  const remove = new Set(['1,-1', '-1,1', '0,-2', '0,2', '-2,0', '2,0']);
+
+  // Gear teeth — protruding hexes at 6 compass points (radius 3)
+  // NE teeth
+  add(2, -3); add(3, -3);
+  // E teeth
+  add(3, -1); add(3, 0);
+  // SE teeth
+  add(1, 2); add(2, 2);
+  // SW teeth
+  add(-2, 3); add(-3, 3);
+  // W teeth
+  add(-3, 1); add(-3, 0);
+  // NW teeth
+  add(-1, -2); add(-2, -1);
+
+  // Filter out removed hexes
+  return coords.filter(c => !remove.has(`${c.q},${c.r}`));
+})();
+
+// ---------------------------------------------------------------------------
+// Lakes: 39 hexes with internal water bodies, 9 harbors
+// ---------------------------------------------------------------------------
+
+function generateLakesBoard(): Board {
+  const allCoords: HexCoord[] = [];
+  const set = new Set<string>();
+  const add = (q: number, r: number) => {
+    const k = `${q},${r}`;
+    if (!set.has(k)) { set.add(k); allCoords.push({ q, r }); }
+  };
+
+  // Main landmass — radius 3 blob
+  for (let q = -3; q <= 3; q++) {
+    for (let r = -3; r <= 3; r++) {
+      if (Math.abs(q + r) <= 3) add(q, r);
+    }
+  }
+
+  // Eastern peninsula
+  add(4, -2); add(4, -1); add(4, 0);
+  // Western peninsula
+  add(-4, 1); add(-4, 2); add(-4, 0);
+  // Southern peninsula
+  add(-1, 4); add(0, 4); add(1, 4);
+
+  // Internal lake hexes — these become water INSIDE the landmass
+  const lakeSet = new Set([
+    '0,0',     // center lake
+    '1,-2',    // NE lake
+    '-2,1',    // SW lake
+    '2,1',     // SE lake
+    '-1,-1',   // NW lake
+  ]);
+
+  const terrainCoords = allCoords.filter(c => !lakeSet.has(`${c.q},${c.r}`));
+  const lakeCoords = allCoords.filter(c => lakeSet.has(`${c.q},${c.r}`));
+
+  const pool = generateTerrainPool(terrainCoords.length);
+  const hexes: HexTile[] = terrainCoords.map((coord, i) => ({
+    coord,
+    terrain: pool[i],
+    numberToken: null,
+  }));
+  generateNumberTokens(hexes);
+
+  const outerWater = generateWaterFrame(allCoords);
+  // Lakes are internal water hexes
+  const waterHexes = [...outerWater, ...lakeCoords];
+  const harbors = generateHarborsN(terrainCoords, waterHexes, 9);
+
+  return { hexes, waterHexes, harbors, vertexBuildings: new Map(), edgeBuildings: new Map() };
 }
 
 // ---------------------------------------------------------------------------

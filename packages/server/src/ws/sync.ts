@@ -38,6 +38,15 @@ export function filterStateForPlayer(state: GameState, playerId: string): unknow
     filtered.freeRoadsRemaining = _getFreeRoads(state.id);
   }
 
+  // Compute actual bank resources (19 per type minus ALL players' holdings)
+  const bankResources: Record<string, number> = { brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 };
+  for (const p of state.players) {
+    for (const [res, count] of Object.entries(p.resources)) {
+      if (res in bankResources) bankResources[res] -= count as number;
+    }
+  }
+  filtered.bankResources = bankResources;
+
   return filtered;
 }
 

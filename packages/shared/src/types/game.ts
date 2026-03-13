@@ -38,6 +38,10 @@ export enum MapType {
   DesertRing = 'desert_ring',
   Turkey = 'turkey',
   World = 'world',
+  Diamond = 'diamond',
+  BritishIsles = 'british_isles',
+  Gear = 'gear',
+  Lakes = 'lakes',
 }
 
 export interface HexTile {
@@ -164,6 +168,9 @@ export interface GameState {
   specialBuildCurrentIndex: number;
 
   log: GameLogEntry[];
+
+  /** ISO timestamp when the current turn expires, or null if no timer. */
+  turnDeadline: string | null;
 }
 
 export interface GameLogEntry {

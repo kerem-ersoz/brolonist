@@ -1,3 +1,4 @@
+import { useRef, useEffect, useState } from 'react';
 import { assetPath } from '../../utils/sprites';
 import { axialToPixel } from '@brolonist/shared';
 
@@ -9,13 +10,44 @@ interface RobberProps {
 }
 
 export function Robber({ hex, size, draggable }: RobberProps) {
-  const pos = axialToPixel(hex.q, hex.r, size);
+  const target = axialToPixel(hex.q, hex.r, size);
+  const prevHex = useRef<{ q: number; r: number }>(hex);
+  const [pos, setPos] = useState(target);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    if (prevHex.current.q === hex.q && prevHex.current.r === hex.r) return;
+    const dest = axialToPixel(hex.q, hex.r, size);
+    // Start from previous position (already rendered there), then slide
+    setAnimating(true);
+    // Use rAF to ensure the non-animated position is painted first
+    requestAnimationFrame(() => {
+      setPos(dest);
+    });
+    const timer = setTimeout(() => setAnimating(false), 1500);
+    prevHex.current = hex;
+    return () => clearTimeout(timer);
+  }, [hex.q, hex.r, size]);
+
+  // Keep pos in sync when size changes without hex changing
+  useEffect(() => {
+    if (!animating) {
+      setPos(axialToPixel(hex.q, hex.r, size));
+    }
+  }, [size, animating, hex.q, hex.r]);
+
   return (
-    <g className={draggable ? 'cursor-grab' : ''}>
+    <g
+      className={draggable ? 'cursor-grab' : ''}
+      style={{
+        transform: `translate(${pos.x}px, ${pos.y}px)`,
+        transition: animating ? 'transform 1500ms cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+      }}
+    >
       <image
         href={assetPath('assets/sprites/robber.png')}
-        x={pos.x - size * 0.525}
-        y={pos.y - size * 0.675}
+        x={-size * 0.525}
+        y={-size * 0.675}
         width={size * 1.05}
         height={size * 1.05}
       />

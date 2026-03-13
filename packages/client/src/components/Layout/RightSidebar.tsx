@@ -23,12 +23,13 @@ interface PlayerInfo {
 interface RightSidebarProps {
   chatLog: ReactNode;
   deckSize: number;
+  bankResources?: Record<string, number>;
   players: PlayerInfo[];
   currentPlayerId: string | null;
   myPlayerId: string | null;
 }
 
-export function RightSidebar({ chatLog, deckSize, players, currentPlayerId, myPlayerId }: RightSidebarProps) {
+export function RightSidebar({ chatLog, deckSize, bankResources, players, currentPlayerId, myPlayerId }: RightSidebarProps) {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Chat / Game Log — fixed at 50% */}
@@ -37,7 +38,7 @@ export function RightSidebar({ chatLog, deckSize, players, currentPlayerId, myPl
       </div>
 
       {/* Bank cards row — centered on right edge */}
-      <BankDisplay deckSize={deckSize} players={players} myPlayerId={myPlayerId} />
+      <BankDisplay deckSize={deckSize} bankResources={bankResources} players={players} myPlayerId={myPlayerId} />
 
       {/* Player cards — fills remaining space, scrolls only for >4 */}
       <div className="flex-1 min-h-0 overflow-y-auto">

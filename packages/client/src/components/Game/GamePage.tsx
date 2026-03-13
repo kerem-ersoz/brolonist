@@ -3,9 +3,10 @@ import { useState, useCallback, useMemo, useEffect, useRef, Component, type Reac
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Board as BoardType, HexCoord, VertexDirection, EdgeDirection } from '@brolonist/shared';
-import { BUILDING_COSTS, BuildingType, hasResources, type Resources } from '@brolonist/shared';
+import { BUILDING_COSTS, BUILDING_LIMITS, BuildingType, DEV_CARD_COST, hasResources, type Resources } from '@brolonist/shared';
 import { useGameStore } from '../../store/gameStore';
 import { useLobbyStore } from '../../store/lobbyStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useAuth } from '../../hooks/useAuth';
 import { Board } from '../Board/Board';
@@ -21,6 +22,7 @@ import { GameLog } from '../Chat/GameLog';
 import { GameLayout } from '../Layout/GameLayout';
 import { RightSidebar } from '../Layout/RightSidebar';
 import { Navbar } from '../Layout/Navbar';
+import { NotificationPills } from '../Layout/NotificationPills';
 import { GameWaitingRoom } from '../Lobby/GameWaitingRoom';
 import { DevPanel } from './DevPanel';
 import { DiscardPanel } from './DiscardPanel';
@@ -76,6 +78,16 @@ function GamePageInner() {
   const myPlayerId = useGameStore((s) => s.myPlayerId);
 
   const gameResult = useGameStore((s) => s.gameResult);
+  const lastError = useGameStore((s) => s.lastError);
+  const addNotification = useNotificationStore((s) => s.addNotification);
+
+  // Show server errors as notification pills
+  useEffect(() => {
+    if (lastError) {
+      addNotification(lastError, 'error');
+      useGameStore.getState().setError(null);
+    }
+  }, [lastError, addNotification]);
 
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [tradePreselect, setTradePreselect] = useState<string | null>(null);
@@ -213,10 +225,17 @@ function GamePageInner() {
       }
     }
 
+    // Robber placed by me with no one to steal from
+    const myRobberMove = newEntries.find(e => e.type === 'move_robber' && e.playerId === myPlayerId);
+    if (myRobberMove && !newEntries.some(e => e.type === 'steal' && e.playerId === myPlayerId)
+        && !(gameState.pendingStealTargets as string[] | undefined)?.length) {
+      addNotification(t('errors.noCardsToSteal'));
+    }
+
     if (newItems.length > 0) {
       setAnimationItems((prev) => [...prev, ...newItems]);
     }
-  }, [gameState?.log.length, gameState, myPlayerId]);
+  }, [gameState?.log.length, gameState, myPlayerId, addNotification, t]);
 
   const handleAnimationComplete = useCallback((id: string) => {
     setAnimationItems((prev) => prev.filter((item) => item.id !== id));
@@ -477,13 +496,68 @@ function GamePageInner() {
     setGhostPlacement(null);
     sendMessage('end_turn');
   }, [sendMessage]);
-  const handleBuyDevCard = useCallback(() => sendMessage('buy_dev_card'), [sendMessage]);
+  const handleBuyDevCard = useCallback(() => {
+    if (!canBuild) {
+      addNotification(t('errors.cannotBuildInPhase'));
+      return;
+    }
+    const me = useGameStore.getState().myPlayer();
+    if (me) {
+      const myRes = me.resources as unknown as Resources;
+      if (!hasResources(myRes, DEV_CARD_COST)) {
+        addNotification(t('errors.insufficientResourcesDevCard'));
+        return;
+      }
+      const deckSize = (useGameStore.getState().gameState as unknown as Record<string, unknown>)?.deckSize as number | undefined;
+      if (deckSize !== undefined && deckSize <= 0) {
+        addNotification(t('errors.devCardDeckEmpty'));
+        return;
+      }
+    }
+    sendMessage('buy_dev_card');
+  }, [sendMessage, addNotification, t, canBuild]);
   const handlePlayDevCard = useCallback((cardType: string, params?: Record<string, unknown>) => {
     sendMessage('play_dev_card', { cardType, params });
   }, [sendMessage]);
   const handleBuild = useCallback((type: 'road' | 'settlement' | 'city') => {
+    if (!canBuild) {
+      addNotification(t('errors.cannotBuildInPhase'));
+      return;
+    }
+    const me = useGameStore.getState().myPlayer();
+    if (!me) return;
+    const myRes = me.resources as unknown as Resources;
+
+    if (type === 'road') {
+      if (me.roadsBuilt >= BUILDING_LIMITS[BuildingType.Road]) {
+        addNotification(t('errors.roadLimitReached'));
+        return;
+      }
+      if (!hasResources(myRes, BUILDING_COSTS[BuildingType.Road]) && freeRoadsRemaining <= 0) {
+        addNotification(t('errors.insufficientResourcesRoad'));
+        return;
+      }
+    } else if (type === 'settlement') {
+      if (me.settlementsBuilt >= BUILDING_LIMITS[BuildingType.Settlement]) {
+        addNotification(t('errors.settlementLimitReached'));
+        return;
+      }
+      if (!hasResources(myRes, BUILDING_COSTS[BuildingType.Settlement])) {
+        addNotification(t('errors.insufficientResourcesSettlement'));
+        return;
+      }
+    } else if (type === 'city') {
+      if (me.citiesBuilt >= BUILDING_LIMITS[BuildingType.City]) {
+        addNotification(t('errors.cityLimitReached'));
+        return;
+      }
+      if (!hasResources(myRes, BUILDING_COSTS[BuildingType.City])) {
+        addNotification(t('errors.insufficientResourcesCity'));
+        return;
+      }
+    }
     setBuildMode(type);
-  }, []);
+  }, [canBuild, freeRoadsRemaining, addNotification, t]);
 
   // Determine if a vertex click should be a city upgrade or a new settlement
   const isMyCityUpgradeTarget = useCallback((vertex: { hex: HexCoord; direction: VertexDirection }) => {
@@ -678,6 +752,7 @@ function GamePageInner() {
           onKick={(targetId) => sendMessage('kick_player', { targetId })}
           onStartGame={() => sendMessage('start_game', {})}
           onUpdateConfig={(updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }) => sendMessage('update_config', updates)}
+          onChangeColor={(color: string) => sendMessage('change_color', { color })}
         />
       );
     }
@@ -720,7 +795,10 @@ function GamePageInner() {
 
   return (
     <div className="h-screen flex flex-col relative overflow-hidden">
-      <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
+      <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout}
+        turnDeadline={(gameState as unknown as Record<string, unknown>).turnDeadline as string | null}
+        turnTimerSeconds={gameState.config?.turnTimerSeconds}
+      />
 
       <GameLayout
         phaseHint={phaseHint}
@@ -777,46 +855,45 @@ function GamePageInner() {
         endTurnButton={
           <div className="flex gap-2">
             <button
-              onClick={canBuild ? () => setBuildMode(buildMode === 'road' ? null : 'road') : undefined}
-              disabled={!canBuild}
-              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+              onClick={() => buildMode === 'road' ? setBuildMode(null) : handleBuild('road')}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all relative ${
                 buildMode === 'road' ? 'ring-2 ring-yellow-300 brightness-125 cursor-pointer' :
-                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Build Road"
             >
               <img src={assetPath('assets/sprites/road-white.png')} alt="Road" className="w-full h-full object-contain" />
+              {me && <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border border-gray-600">{BUILDING_LIMITS[BuildingType.Road] - me.roadsBuilt}</span>}
             </button>
             <button
-              onClick={canBuild ? () => setBuildMode(buildMode === 'settlement' ? null : 'settlement') : undefined}
-              disabled={!canBuild}
-              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+              onClick={() => buildMode === 'settlement' ? setBuildMode(null) : handleBuild('settlement')}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all relative ${
                 buildMode === 'settlement' ? 'ring-2 ring-green-300 brightness-125 cursor-pointer' :
-                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Build Settlement"
             >
               <img src={assetPath('assets/sprites/settlement-white.png')} alt="Settlement" className="w-full h-full object-contain" />
+              {me && <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border border-gray-600">{BUILDING_LIMITS[BuildingType.Settlement] - me.settlementsBuilt}</span>}
             </button>
             <button
-              onClick={canBuild ? () => setBuildMode(buildMode === 'city' ? null : 'city') : undefined}
-              disabled={!canBuild}
-              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden ${
+              onClick={() => buildMode === 'city' ? setBuildMode(null) : handleBuild('city')}
+              className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all relative ${
                 buildMode === 'city' ? 'ring-2 ring-blue-300 brightness-125 cursor-pointer' :
-                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+                canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Build City"
             >
               <img src={assetPath('assets/sprites/city-white.png')} alt="City" className="w-full h-full object-contain" />
+              {me && <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border border-gray-600">{BUILDING_LIMITS[BuildingType.City] - me.citiesBuilt}</span>}
             </button>
             <button
-              onClick={canBuyDevCard ? handleBuyDevCard : undefined}
-              disabled={!canBuyDevCard}
+              onClick={handleBuyDevCard}
               className={`rounded-lg shadow-lg pointer-events-auto flex items-center justify-center transition-all overflow-hidden relative ${
-                canBuyDevCard ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
+                canBuyDevCard ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
               title="Buy Dev Card"
@@ -850,6 +927,7 @@ function GamePageInner() {
               />
             }
             deckSize={(gameState as unknown as Record<string, unknown>).deckSize as number ?? 0}
+            bankResources={(gameState as unknown as Record<string, unknown>).bankResources as Record<string, number> | undefined}
             players={gameState.players as unknown as Array<{
               id: string; name: string; color: string; status: string;
               victoryPoints: number; resourceCount?: number; devCardCount?: number;
@@ -882,6 +960,9 @@ function GamePageInner() {
           </>
         }
       />
+
+      {/* Notification pills for illegal actions */}
+      <NotificationPills />
 
       {/* Trade Modal — fixed position above hand */}
       {tradeModalOpen && me && (

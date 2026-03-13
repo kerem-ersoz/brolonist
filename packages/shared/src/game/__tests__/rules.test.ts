@@ -50,6 +50,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
     specialBuildOrder: [],
     specialBuildCurrentIndex: 0,
     log: [],
+    turnDeadline: null,
     ...overrides,
   };
 }

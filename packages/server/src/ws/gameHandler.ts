@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { startTurnTimer, clearTurnTimer, cleanupTimers } from './turnTimer.js';
 import {
   type GameState,
   type GameConfig,
@@ -133,7 +134,17 @@ function broadcastState(gameId: string, state: GameState): void {
   for (const pid of members) {
     hub.send(pid, 'game_state', filterStateForPlayer(state, pid));
   }
+
+  // Auto-manage turn timer: reset whenever the active player or phase changes
+  const timerKey = `${state.currentPlayerIndex}:${state.currentPhase}:${state.turnNumber}`;
+  const prevKey = lastTimerKey.get(gameId);
+  if (timerKey !== prevKey) {
+    lastTimerKey.set(gameId, timerKey);
+    resetTurnTimer(gameId, state);
+  }
 }
+
+const lastTimerKey = new Map<string, string>();
 
 function broadcastAndCheckVictory(gameId: string, state: GameState): void {
   broadcastState(gameId, state);
@@ -141,6 +152,9 @@ function broadcastAndCheckVictory(gameId: string, state: GameState): void {
   if (winnerId) {
     state.currentPhase = GamePhase.GameOver;
     state.status = 'finished';
+    state.turnDeadline = null;
+    cleanupTimers(gameId);
+    lastTimerKey.delete(gameId);
     const winner = state.players.find((p) => p.id === winnerId);
 
     // Build full scoreboard with VP breakdown for all players
@@ -172,6 +186,106 @@ function broadcastAndCheckVictory(gameId: string, state: GameState): void {
     });
     broadcastState(gameId, state);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Turn timer management
+// ---------------------------------------------------------------------------
+
+const ROLL_TIMER_SECONDS = 5;
+const ROBBER_TIMER_SECONDS = 30;
+
+function resetTurnTimer(gameId: string, state: GameState): void {
+  const seconds = state.config.turnTimerSeconds;
+  if (state.currentPhase === GamePhase.GameOver) {
+    state.turnDeadline = null;
+    clearTurnTimer(gameId);
+    return;
+  }
+
+  // Roll phase always gets a fixed 5-second timer
+  if (state.currentPhase === GamePhase.RollDice) {
+    const deadline = new Date(Date.now() + ROLL_TIMER_SECONDS * 1000).toISOString();
+    state.turnDeadline = deadline;
+
+    startTurnTimer(gameId, ROLL_TIMER_SECONDS * 1000, () => {
+      const s = games.get(gameId);
+      if (!s || s.currentPhase !== GamePhase.RollDice) return;
+      const current = getCurrentPlayer(s);
+      handleRollDice(current.id, gameId);
+    });
+    return;
+  }
+
+  // Move robber always gets a fixed 30-second timer
+  if (state.currentPhase === GamePhase.MoveRobber) {
+    const deadline = new Date(Date.now() + ROBBER_TIMER_SECONDS * 1000).toISOString();
+    state.turnDeadline = deadline;
+
+    startTurnTimer(gameId, ROBBER_TIMER_SECONDS * 1000, () => {
+      const s = games.get(gameId);
+      if (!s || s.currentPhase !== GamePhase.MoveRobber) return;
+      const current = getCurrentPlayer(s);
+      // If pending steal targets, pick randomly
+      if (s.pendingStealTargets && s.pendingStealTargets.length > 0) {
+        const victimId = s.pendingStealTargets[Math.floor(Math.random() * s.pendingStealTargets.length)];
+        handleStealFrom(current.id, gameId, { victimId });
+        return;
+      }
+      // Move robber to a random hex
+      const validHexes = s.board.hexes
+        .map(h => h.coord)
+        .filter(c => !(c.q === s.robberPosition.q && c.r === s.robberPosition.r));
+      if (validHexes.length > 0) {
+        const target = validHexes[Math.floor(Math.random() * validHexes.length)];
+        handleMoveRobber(current.id, gameId, { hex: target, victimId: undefined });
+      }
+    });
+    return;
+  }
+
+  if (!seconds || seconds <= 0) {
+    state.turnDeadline = null;
+    clearTurnTimer(gameId);
+    return;
+  }
+
+  const deadline = new Date(Date.now() + seconds * 1000).toISOString();
+  state.turnDeadline = deadline;
+
+  startTurnTimer(gameId, seconds * 1000, () => {
+    const s = games.get(gameId);
+    if (!s || s.currentPhase === GamePhase.GameOver) return;
+
+    const current = getCurrentPlayer(s);
+
+    // Auto-action based on current phase
+    if (s.currentPhase === GamePhase.TradeAndBuild) {
+      handleEndTurn(current.id, gameId);
+    } else if (s.currentPhase === GamePhase.Discard) {
+      for (const pid of [...s.pendingDiscards]) {
+        const player = s.players.find(p => p.id === pid);
+        if (!player) continue;
+        const total = Object.values(player.resources).reduce((a, b) => a + b, 0);
+        const discardCount = Math.floor(total / 2);
+        const toDiscard: Record<string, number> = {};
+        let remaining = discardCount;
+        for (const [res, count] of Object.entries(player.resources)) {
+          const take = Math.min(count, remaining);
+          if (take > 0) toDiscard[res] = take;
+          remaining -= take;
+          if (remaining <= 0) break;
+        }
+        handleDiscardCards(pid, gameId, { resources: toDiscard as Resources });
+      }
+    } else {
+      engineEndTurn(s);
+      addLogEntry(s, { type: 'end_turn', message: 'Turn ended (timeout)', playerId: current.id });
+      resetTurnTimer(gameId, s);
+      broadcastState(gameId, s);
+      scheduleBotTurn(gameId);
+    }
+  });
 }
 
 function createDevelopmentDeck(): DevelopmentCardType[] {
@@ -207,6 +321,7 @@ const PLAYER_COLORS: PlayerColor[] = [
 export interface PlayerInit {
   id: string;
   name: string;
+  color?: string;
   isBot?: boolean;
   botStrategy?: 'random' | 'greedy' | 'smart';
 }
@@ -219,7 +334,7 @@ export function initializeGame(
   const board = generateBoard({ playerCount: players.length, mapType: config.mapType });
 
   const gamePlayers: Player[] = players.map((p, i) =>
-    createPlayer(p.id, p.name, PLAYER_COLORS[i % PLAYER_COLORS.length], p.isBot, p.botStrategy),
+    createPlayer(p.id, p.name, (p.color as PlayerColor) || PLAYER_COLORS[i % PLAYER_COLORS.length], p.isBot, p.botStrategy),
   );
 
   // Find desert hex for initial robber position
@@ -253,6 +368,7 @@ export function initializeGame(
     specialBuildOrder: [],
     specialBuildCurrentIndex: 0,
     log: [],
+    turnDeadline: null,
   };
 
   games.set(gameId, state);
@@ -860,6 +976,9 @@ export function handleTradeRespond(
   } else if (payload.response === 'counter' && payload.counter) {
     offer.counterOffers[playerId] = payload.counter;
     addLogEntry(state, { type: 'trade_counter', message: 'made a counter-offer', playerId });
+    // Reset the trade timer to 15s on counter-offer
+    const COUNTER_TTL = 15_000;
+    scheduleTradeExpiry(gameId, offer.id, COUNTER_TTL);
   } else if (payload.response === 'decline') {
     addLogEntry(state, { type: 'trade_decline', message: 'declined the trade', playerId });
   }

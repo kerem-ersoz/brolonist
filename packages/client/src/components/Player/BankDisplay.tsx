@@ -4,6 +4,7 @@ import { ICONS } from '../../utils/sprites';
 
 interface BankDisplayProps {
   deckSize: number;
+  bankResources?: Record<string, number>;
   players: Array<{
     resources: Record<string, number>;
     resourceCount?: number;
@@ -13,7 +14,7 @@ interface BankDisplayProps {
 
 const BANK_TOTAL_PER_RESOURCE = 19;
 
-const RESOURCE_ORDER = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
+const RESOURCE_ORDER = ['lumber', 'brick', 'wool', 'grain', 'ore'] as const;
 
 const RESOURCE_CARD_SPRITES: Record<string, string> = {
   brick: assetPath('assets/sprites/card-brick.png'),
@@ -31,14 +32,21 @@ const RESOURCE_FALLBACKS: Record<string, string> = {
   wool: '🐑',
 };
 
-export function BankDisplay({ deckSize, players }: BankDisplayProps) {
-  // Calculate remaining bank resources: 19 - sum across all players
-  // For opponents, resources is zeroed and resourceCount holds total, so
-  // we can only compute an exact per-resource bank count based on visible data
-  const usedResources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
-  for (const p of players) {
+export function BankDisplay({ deckSize, bankResources, players }: BankDisplayProps) {
+  // Use server-provided bank resources if available, otherwise estimate from visible data
+  let remainingResources: Record<string, number>;
+  if (bankResources) {
+    remainingResources = bankResources;
+  } else {
+    const usedResources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    for (const p of players) {
+      for (const r of RESOURCE_ORDER) {
+        usedResources[r] += p.resources[r] ?? 0;
+      }
+    }
+    remainingResources = {} as Record<string, number>;
     for (const r of RESOURCE_ORDER) {
-      usedResources[r] += p.resources[r] ?? 0;
+      remainingResources[r] = BANK_TOTAL_PER_RESOURCE - usedResources[r];
     }
   }
 
@@ -58,7 +66,7 @@ export function BankDisplay({ deckSize, players }: BankDisplayProps) {
 
       {/* Resource card stacks */}
       {RESOURCE_ORDER.map((r) => {
-        const remaining = BANK_TOTAL_PER_RESOURCE - usedResources[r];
+        const remaining = remainingResources[r] ?? 0;
         return (
           <div key={r} className="flex flex-col items-center">
             <div className="w-9 h-12 rounded overflow-hidden border border-white/10 shadow-sm">

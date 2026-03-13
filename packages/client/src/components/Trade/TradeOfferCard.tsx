@@ -89,7 +89,7 @@ function OfferCard({ offer, index, total, onAccept, onDecline, onCounter }: {
             <div className={`w-3 h-3 rounded-full ${PLAYER_COLOR_DOT[offer.fromPlayerColor] ?? 'bg-gray-500'}`} />
             <span className="text-white text-sm font-semibold flex-1">{offer.fromPlayerName} {t('trade.offers', 'offers')}:</span>
             {secondsLeft > 0 && (
-              <span className={`text-xs font-mono font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`}>
+              <span className={`text-xs font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                 {secondsLeft}s
               </span>
             )}

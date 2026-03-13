@@ -100,29 +100,29 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
                 </div>
               </div>
 
-              {/* VP badge */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <span className="text-yellow-400 text-xs font-bold">{p.victoryPoints}</span>
-                <span className="text-[10px] text-gray-400">VP</span>
+              {/* Card counts + VP */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <div className="relative" title="Resource cards">
+                  <SpriteImage src={ICONS.cardResource} fallback={<span className="text-[12px]">🎴</span>} className="w-5 h-7 object-fill rounded-sm" />
+                  <span className="absolute -top-1.5 -right-2 bg-gray-900 text-white text-[9px] font-bold min-w-[14px] h-[14px] rounded-full flex items-center justify-center border border-gray-600 px-0.5">
+                    {totalCards}
+                  </span>
+                </div>
+                <div className="relative" title="Development cards">
+                  <SpriteImage src={ICONS.cardDev} fallback={<span className="text-[12px]">🃏</span>} className="w-5 h-7 object-fill rounded-sm" />
+                  <span className="absolute -top-1.5 -right-2 bg-gray-900 text-white text-[9px] font-bold min-w-[14px] h-[14px] rounded-full flex items-center justify-center border border-gray-600 px-0.5">
+                    {devCards}
+                  </span>
+                </div>
+                <div className="flex items-center gap-0.5 ml-1">
+                  <span className="text-yellow-400 text-xs font-bold">{p.victoryPoints}</span>
+                  <span className="text-[10px] text-gray-400">VP</span>
+                </div>
               </div>
             </div>
 
             {/* Stats row */}
             <div className="flex items-center gap-2 mt-1.5 pl-10">
-              {/* Cards count — opponents only */}
-              {!isMe && (
-                <div className="flex items-center gap-0.5" title="Total resource cards">
-                  <SpriteImage src={ICONS.cardResource} fallback={<span className="text-[12px] leading-none">🎴</span>} className="w-3 h-3 object-contain" />
-                  <span className="text-[10px] text-gray-300 font-medium">{totalCards}</span>
-                </div>
-              )}
-
-              {/* Dev cards */}
-              <div className="flex items-center gap-0.5" title="Development cards">
-                <SpriteImage src={ICONS.cardDev} fallback={<span className="text-[12px] leading-none">🃏</span>} className="w-3 h-3 object-contain" />
-                <span className="text-[10px] text-gray-300 font-medium">{devCards}</span>
-              </div>
-
               {/* Knights */}
               <div className="flex items-center gap-0.5" title="Knights played">
                 <SpriteImage src={DEV_CARD_SPRITES.knight} fallback={<span className="text-[12px] leading-none">⚔️</span>} className="w-3 h-3 object-contain" />

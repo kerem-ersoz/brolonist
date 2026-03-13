@@ -89,7 +89,7 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
         <h3 className="text-white font-bold text-sm">{t('trade.yourOffer', 'Your Trade Offer')}</h3>
         <div className="flex items-center gap-2">
           {secondsLeft > 0 && (
-            <span className={`text-xs font-mono font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`}>
+            <span className={`text-xs font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
               {secondsLeft}s
             </span>
           )}

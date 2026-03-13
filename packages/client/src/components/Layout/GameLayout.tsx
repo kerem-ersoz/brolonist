@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 interface GameLayoutProps {
   board: ReactNode;
@@ -15,12 +15,12 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
   return (
     <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0">
       {/* Main area */}
-      <div className="flex-1 flex flex-col min-h-0 relative lg:mr-80">
-        {/* Phase hint — floating pill (always reserves vertical space) */}
-        <div className="flex-shrink-0 flex justify-center py-1.5 pointer-events-none" style={{ minHeight: 40 }}>
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* Phase hint — floating pill, absolutely positioned over the board */}
+        <div className="absolute top-1.5 left-0 right-0 flex justify-center pointer-events-none z-20">
           {phaseHint ? (
             <div className={`px-5 py-2 rounded-full text-white text-sm font-semibold shadow-lg backdrop-blur-sm ${
-              isMyTurn ? 'bg-yellow-600/90 animate-pulse' : 'bg-gray-700/90'
+              isMyTurn ? 'bg-yellow-600/80 animate-pulse' : 'bg-gray-700/70'
             }`}>
               {phaseHint}
             </div>
@@ -32,14 +32,14 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
 
         {/* Dice + End turn — stacked vertically, bottom-right, above everything */}
         {(dice || endTurnButton) && (
-          <div className="absolute bottom-px right-[11px] z-40 flex flex-col items-end gap-2 pointer-events-auto">
+          <div className="absolute bottom-px z-40 flex flex-col items-end gap-2 pointer-events-auto" style={{ right: 'calc(20rem + 11px)' }}>
             <div style={{ marginRight: -15 }}>{dice}</div>
             {endTurnButton}
           </div>
         )}
 
         {/* Trade offers — top-right of the map area, scrollable column */}
-        <div className="pointer-events-none" style={{ position: 'absolute', top: 8, right: 8, bottom: 130, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 8, width: 288, overflowY: 'auto' }}>
+        <div className="pointer-events-none" style={{ position: 'absolute', top: 8, right: 'calc(20rem + 8px)', bottom: 130, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 8, width: 288, overflowY: 'auto' }}>
           <div className="pointer-events-auto">
             {tradeOffers}
           </div>
@@ -48,7 +48,7 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
 
       {/* Right sidebar — absolutely positioned to span full height */}
       {rightPanel && (
-        <div className="hidden lg:flex lg:flex-col lg:w-80 py-2 px-2 gap-2 border-l border-gray-700/50 absolute top-0 right-0 bottom-0 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+        <div className="hidden lg:flex lg:flex-col lg:w-80 py-2 px-2 gap-2 border-l border-gray-700/50 absolute top-0 right-0 bottom-0 z-50 backdrop-blur-sm" style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}>
           {rightPanel}
         </div>
       )}

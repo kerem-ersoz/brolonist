@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 interface LobbyPlayerView {
   id: string;
   name: string;
+  color: string;
   ready: boolean;
   isBot: boolean;
   botStrategy?: string;
@@ -29,18 +30,26 @@ export interface GameWaitingRoomProps {
   onKick: (playerId: string) => void;
   onStartGame: () => void;
   onUpdateConfig: (updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }) => void;
+  onChangeColor: (color: string) => void;
 }
 
 const PLAYER_COLORS = [
   'bg-red-500',
   'bg-blue-500',
-  'bg-yellow-500',
+  'bg-gray-200',
   'bg-orange-500',
   'bg-green-500',
+  'bg-amber-800',
   'bg-purple-500',
-  'bg-pink-500',
   'bg-teal-500',
 ];
+
+const COLOR_NAMES = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal'];
+
+const COLOR_BG_MAP: Record<string, string> = {
+  red: 'bg-red-500', blue: 'bg-blue-500', white: 'bg-gray-200', orange: 'bg-orange-500',
+  green: 'bg-green-500', brown: 'bg-amber-800', purple: 'bg-purple-500', teal: 'bg-teal-500',
+};
 
 const BOT_STRATEGIES = [
   { value: 'random', labelKey: 'lobby.bot.random' },
@@ -57,9 +66,11 @@ export function GameWaitingRoom({
   onKick,
   onStartGame,
   onUpdateConfig,
+  onChangeColor,
 }: GameWaitingRoomProps) {
   const { t } = useTranslation();
   const [botStrategy, setBotStrategy] = useState('random');
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
 
   const isHost = myPlayerId === lobby.hostId;
   const me = lobby.players.find((p) => p.id === myPlayerId);
@@ -88,9 +99,43 @@ export function GameWaitingRoom({
               key={player.id}
               className="flex items-center gap-3 bg-gray-800 rounded-lg p-3 transition-all"
             >
-              {/* Avatar */}
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${PLAYER_COLORS[idx % PLAYER_COLORS.length]}`}>
-                {player.isBot ? '🤖' : player.name.charAt(0).toUpperCase()}
+              {/* Avatar — clickable for self to open color picker */}
+              <div className="relative">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${COLOR_BG_MAP[player.color] || PLAYER_COLORS[idx % PLAYER_COLORS.length]} ${player.id === myPlayerId && !player.isBot ? 'cursor-pointer ring-2 ring-transparent hover:ring-white/40 transition-all' : ''}`}
+                  onClick={player.id === myPlayerId && !player.isBot ? () => setColorPickerOpen(!colorPickerOpen) : undefined}
+                  title={player.id === myPlayerId && !player.isBot ? 'Click to change color' : undefined}
+                >
+                  {player.isBot ? '🤖' : player.name.charAt(0).toUpperCase()}
+                </div>
+                {/* Color picker modal */}
+                {player.id === myPlayerId && !player.isBot && colorPickerOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setColorPickerOpen(false)}>
+                    <div className="bg-gray-800 rounded-xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+                      <div className="grid grid-cols-4 gap-3 place-items-center">
+                        {COLOR_NAMES.map(c => {
+                          const taken = lobby.players.some(p => p.id !== myPlayerId && p.color === c);
+                          const isSelected = c === player.color;
+                          return (
+                            <button
+                              key={c}
+                              onClick={() => { if (!taken) { onChangeColor(c); setColorPickerOpen(false); } }}
+                              disabled={taken}
+                              className={`w-11 h-11 rounded-lg transition-all flex items-center justify-center ${
+                                isSelected ? 'scale-110 ring-2 ring-white/60 bg-white/10' :
+                                taken ? 'opacity-25 cursor-not-allowed' :
+                                'hover:scale-110 hover:bg-white/10 cursor-pointer'
+                              }`}
+                              title={taken ? `${c} (taken)` : c}
+                            >
+                              <img src={`/assets/sprites/settlement-${c}.png`} alt={c} className="w-9 h-9 object-contain" draggable={false} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Name + badges */}
@@ -183,7 +228,7 @@ export function GameWaitingRoom({
                     onChange={(e) => onUpdateConfig({ mapType: e.target.value })}
                     className="w-full mt-1 bg-gray-700 text-white rounded px-2 py-1 text-sm border border-gray-600"
                   >
-                    {['standard','random','pangaea','archipelago','rich_coast','desert_ring','turkey','world'].map(m => (
+                    {['standard','random','pangaea','archipelago','rich_coast','desert_ring','turkey','world','diamond','british_isles','gear','lakes'].map(m => (
                       <option key={m} value={m}>{t(`map.${m.replace('_','')}` as never) || m}</option>
                     ))}
                   </select>

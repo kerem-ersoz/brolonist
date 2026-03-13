@@ -23,7 +23,7 @@ export function DiscardPanel({ discardCount, selectedCount, timerSeconds, onConf
     <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
       <div className="bg-gray-800/95 border border-red-500/60 rounded-xl px-5 py-3 shadow-2xl flex items-center gap-4 backdrop-blur-sm">
         {/* Timer */}
-        <div className={`text-xl font-mono font-bold min-w-[3ch] text-center ${timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-yellow-400'}`}>
+        <div className={`text-xl font-bold min-w-[3ch] text-center ${timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-yellow-400'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
           {timeLeft}s
         </div>
 

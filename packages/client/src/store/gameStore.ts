@@ -50,6 +50,8 @@ interface GameStateView {
   deckSize?: number;
   freeRoadsRemaining?: number;
   log: Array<{ timestamp: string; playerId?: string; type: string; message: string; data?: Record<string, unknown> }>;
+  config?: { turnTimerSeconds?: number; victoryPoints?: number; [key: string]: unknown };
+  turnDeadline?: string | null;
 }
 
 interface PlayerStanding {

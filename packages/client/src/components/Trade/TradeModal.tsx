@@ -3,7 +3,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SpriteImage } from '../Sprites/SpriteImage';
 
-const RESOURCES = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
+const RESOURCES = ['lumber', 'brick', 'wool', 'grain', 'ore'] as const;
 const RESOURCE_ICONS: Record<string, string> = {
   brick: '🧱',
   lumber: '🪵',

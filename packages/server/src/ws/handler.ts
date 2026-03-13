@@ -90,6 +90,9 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
     case 'update_config':
       handleUpdateConfig(playerId, msg.payload as { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string });
       break;
+    case 'change_color':
+      handleChangeColor(playerId, msg.payload as { color: string });
+      break;
     // Game actions — delegated to gameHandler
     case 'roll_dice':
       handleRollDice(playerId, getGameId(playerId));
@@ -261,6 +264,29 @@ function handleUpdateConfig(playerId: string, payload: { victoryPoints?: number;
   broadcastLobbyState(client.gameId);
 }
 
+function handleChangeColor(playerId: string, payload: { color: string }): void {
+  const client = hub.getClient(playerId);
+  if (!client?.gameId) return;
+  const lobby = getLobbyGame(client.gameId);
+  if (!lobby) return;
+  const validColors = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal'];
+  if (!validColors.includes(payload.color)) {
+    hub.send(playerId, 'error', { code: 'INVALID_COLOR', message: 'Invalid color' });
+    return;
+  }
+  // Check if color is already taken by another player
+  const taken = lobby.players.some(p => p.id !== playerId && p.color === payload.color);
+  if (taken) {
+    hub.send(playerId, 'error', { code: 'COLOR_TAKEN', message: 'That color is already taken' });
+    return;
+  }
+  const player = lobby.players.find(p => p.id === playerId);
+  if (player) {
+    player.color = payload.color;
+    broadcastLobbyState(client.gameId);
+  }
+}
+
 function handleStartGameFromLobby(playerId: string): void {
   const client = hub.getClient(playerId);
   if (!client?.gameId) return;
@@ -285,6 +311,7 @@ function handleStartGameFromLobby(playerId: string): void {
   const playerInits: PlayerInit[] = lobby.players.map((p) => ({
     id: p.id,
     name: p.name,
+    color: p.color,
     isBot: p.isBot,
     botStrategy: p.botStrategy as PlayerInit['botStrategy'],
   }));

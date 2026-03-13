@@ -12,6 +12,7 @@ interface GameListing {
 interface LobbyPlayer {
   id: string;
   name: string;
+  color: string;
   ready: boolean;
   isBot: boolean;
   botStrategy?: string;

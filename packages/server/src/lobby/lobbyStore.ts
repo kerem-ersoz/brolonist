@@ -24,9 +24,17 @@ function generateTableName(existing: Map<string, GameLobby>): string {
 export interface LobbyPlayer {
   id: string;
   name: string;
+  color: string;
   ready: boolean;
   isBot: boolean;
   botStrategy?: string;
+}
+
+const ALL_COLORS = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal'];
+
+function getNextAvailableColor(players: LobbyPlayer[]): string {
+  const usedColors = new Set(players.map(p => p.color));
+  return ALL_COLORS.find(c => !usedColors.has(c)) || ALL_COLORS[0];
 }
 
 export interface GameLobby {
@@ -61,7 +69,7 @@ export function createLobbyGame(
     name: generateTableName(lobbyGames),
     hostId,
     hostName,
-    players: [{ id: hostId, name: hostName, ready: true, isBot: false }],
+    players: [{ id: hostId, name: hostName, color: ALL_COLORS[0], ready: true, isBot: false }],
     spectators: [],
     config: {
       victoryPoints: 10,
@@ -97,7 +105,7 @@ export function addPlayerToLobby(
     game.spectators.push({ id: playerId, name: playerName });
     return game;
   }
-  game.players.push({ id: playerId, name: playerName, ready: false, isBot: false });
+  game.players.push({ id: playerId, name: playerName, color: getNextAvailableColor(game.players), ready: false, isBot: false });
   return game;
 }
 
@@ -138,6 +146,7 @@ export function addBotToLobby(
   game.players.push({
     id: botId,
     name: `Bot ${botNumber}`,
+    color: getNextAvailableColor(game.players),
     ready: true,
     isBot: true,
     botStrategy: strategy,

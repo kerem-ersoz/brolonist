@@ -1,6 +1,7 @@
 import { assetPath } from '../../utils/sprites';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNotificationStore } from '../../store/notificationStore';
 
 interface PlayerHandProps {
   resources: Record<string, number>;
@@ -72,8 +73,6 @@ const DEV_CARD_I18N: Record<string, string> = {
   monopoly: 'monopoly',
 };
 
-const RESOURCE_ORDER_ALL = ['brick', 'lumber', 'ore', 'grain', 'wool'] as const;
-
 export function PlayerHand({
   resources,
   developmentCards,
@@ -92,6 +91,7 @@ export function PlayerHand({
   discardMax,
 }: PlayerHandProps) {
   const { t } = useTranslation();
+  const addNotification = useNotificationStore((s) => s.addNotification);
   const [pendingCard, setPendingCard] = useState<string | null>(null);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedForTrade, setSelectedForTrade] = useState<string[]>([]);
@@ -200,7 +200,13 @@ export function PlayerHand({
               <button
                 key={type}
                 onClick={() => {
-                  if (!canPlay) return;
+                  if (!canPlay) {
+                    if (isVP) return;
+                    if (!isMyTurn) addNotification(t('errors.notYourTurn'));
+                    else if (devCardPlayedThisTurn) addNotification(t('errors.devCardAlreadyPlayed'));
+                    else if (!playable) addNotification(t('errors.devCardBoughtThisTurn'));
+                    return;
+                  }
                   if (type === 'year_of_plenty' || type === 'monopoly') {
                     setPendingCard(type);
                     setSelectedResources([]);
@@ -236,33 +242,49 @@ export function PlayerHand({
                   ? `${t('devCards.yearOfPlenty')}: Pick 2 resources`
                   : `${t('devCards.monopoly')}: Pick 1 resource`}
               </div>
-              <div className="flex gap-2 justify-center">
-                {RESOURCE_ORDER_ALL.map((r) => {
+              <div className="flex gap-1.5 justify-center">
+                {RESOURCE_ORDER.map((r) => {
                   const selected = selectedResources.filter((s) => s === r).length;
 
                   return (
                     <button
                       key={r}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
                         if (pendingCard === 'monopoly') {
                           onPlayDevCard('monopoly', { resourceType: r });
                           setPendingCard(null);
                           setSelectedResources([]);
                         } else {
-                          const next = [...selectedResources, r];
-                          if (next.length <= 2) {
-                            setSelectedResources(next);
+                          if (selectedResources.length < 2) {
+                            setSelectedResources([...selectedResources, r]);
                           }
                         }
                       }}
-                      disabled={pendingCard === 'year_of_plenty' ? selectedResources.length >= 2 : false}
-                      className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg border transition-colors
-                        ${(pendingCard === 'year_of_plenty' ? selectedResources.length < 2 : true) ? 'border-gray-500 hover:border-white hover:bg-gray-700 cursor-pointer' : 'border-gray-700 opacity-40 cursor-default'}
-                        ${selected > 0 ? 'bg-gray-700 border-white ring-1 ring-white/40' : ''}`}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (pendingCard === 'year_of_plenty' && selected > 0) {
+                          const idx = selectedResources.lastIndexOf(r);
+                          if (idx !== -1) {
+                            setSelectedResources(selectedResources.filter((_, i) => i !== idx));
+                          }
+                        }
+                      }}
+                      className={`relative w-11 h-14 rounded-lg border-2 flex flex-col items-center justify-center transition-all select-none ${
+                        selected > 0
+                          ? 'border-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.4)] -translate-y-0.5'
+                          : (pendingCard === 'year_of_plenty' && selectedResources.length >= 2)
+                            ? 'border-white/20 opacity-40 cursor-default'
+                            : 'border-white/20 hover:border-white/50 cursor-pointer'
+                      }`}
+                      title={t(`resources.${r}`)}
                     >
-                    <SpriteImage src={RESOURCE_SPRITES[r]} fallback={<span className="text-[14px] leading-none">{RESOURCE_ICONS[r as keyof typeof RESOURCE_ICONS]}</span>} className="w-5 h-5 object-contain pointer-events-none" />
-                      <span className="text-[10px] text-gray-300">{t(`resources.${r}`)}</span>
-                      {selected > 0 && <span className="text-[9px] text-yellow-400 font-bold">×{selected}</span>}
+                      <SpriteImage src={RESOURCE_CARD_SPRITES[r]} fallback={<span className="text-lg leading-none drop-shadow">{RESOURCE_ICONS[r as keyof typeof RESOURCE_ICONS]}</span>} className="w-full h-full object-fill pointer-events-none" />
+                      {selected > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-yellow-500 text-white text-[10px] font-bold min-w-[16px] h-[16px] rounded-full flex items-center justify-center shadow-md px-0.5">
+                          {selected}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

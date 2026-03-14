@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getRedis } from '../store/redis.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const turkishWords: string[] = JSON.parse(
@@ -82,6 +83,7 @@ export function createLobbyGame(
   };
 
   lobbyGames.set(game.id, game);
+  persistLobbyToRedis(game.id, game);
   return game;
 }
 
@@ -98,15 +100,39 @@ export function addPlayerToLobby(
 ): GameLobby | null {
   const game = lobbyGames.get(gameId);
   if (!game || game.status !== 'lobby') return null;
-  if (game.players.some((p) => p.id === playerId)) return game; // already in
+  if (game.players.some((p) => p.id === playerId)) {
+    // Reassign host if current host is gone (only bots remain)
+    reassignHostIfNeeded(game, playerId, playerName);
+    return game;
+  }
   if (game.spectators.some((s) => s.id === playerId)) return game; // already spectating
   if (game.players.length >= MAX_PLAYERS) {
     // Join as spectator
     game.spectators.push({ id: playerId, name: playerName });
+    persistLobbyToRedis(game.id, game);
     return game;
   }
   game.players.push({ id: playerId, name: playerName, color: getNextAvailableColor(game.players), ready: false, isBot: false });
+
+  // Reassign host if current host doesn't exist or is a bot
+  reassignHostIfNeeded(game, playerId, playerName);
+
+  persistLobbyToRedis(game.id, game);
   return game;
+}
+
+/** If the current host is not a human player in the lobby, reassign to the given player. */
+function reassignHostIfNeeded(game: GameLobby, candidateId: string, candidateName: string): void {
+  const currentHost = game.players.find((p) => p.id === game.hostId && !p.isBot);
+  if (!currentHost) {
+    game.hostId = candidateId;
+    game.hostName = candidateName;
+  }
+  // Host should always be ready
+  const host = game.players.find((p) => p.id === game.hostId);
+  if (host && !host.ready) {
+    host.ready = true;
+  }
 }
 
 export function removePlayerFromLobby(
@@ -117,6 +143,25 @@ export function removePlayerFromLobby(
   if (!game) return null;
   game.players = game.players.filter((p) => p.id !== playerId);
   game.spectators = game.spectators.filter((s) => s.id !== playerId);
+
+  // Host reassignment: if host left, pick next human player
+  if (game.hostId === playerId) {
+    const nextHuman = game.players.find((p) => !p.isBot);
+    if (nextHuman) {
+      game.hostId = nextHuman.id;
+      game.hostName = nextHuman.name;
+    }
+    // If only bots remain, hostId stays stale — will be reassigned on next human join
+  }
+
+  // Clean up empty lobbies (no humans left, no bots)
+  if (game.players.length === 0 && game.spectators.length === 0) {
+    lobbyGames.delete(gameId);
+    persistLobbyToRedis(game.id, null);
+    return null;
+  }
+
+  persistLobbyToRedis(game.id, game);
   return game;
 }
 
@@ -129,6 +174,7 @@ export function setPlayerReady(
   if (!game) return null;
   const player = game.players.find((p) => p.id === playerId);
   if (player) player.ready = ready;
+  persistLobbyToRedis(gameId, game);
   return game;
 }
 
@@ -151,6 +197,7 @@ export function addBotToLobby(
     isBot: true,
     botStrategy: strategy,
   });
+  persistLobbyToRedis(gameId, game);
   return game;
 }
 
@@ -163,6 +210,7 @@ export function removeBotFromLobby(
   const bot = game.players.find((p) => p.id === botId && p.isBot);
   if (!bot) return null;
   game.players = game.players.filter((p) => p.id !== botId);
+  persistLobbyToRedis(gameId, game);
   return game;
 }
 
@@ -179,11 +227,12 @@ export function updateLobbyConfig(
     game.config.turnTimerSeconds = updates.turnTimerSeconds;
   }
   if (updates.mapType !== undefined) {
-    const validMaps = ['standard', 'random', 'pangaea', 'archipelago', 'rich_coast', 'desert_ring', 'turkey', 'world'];
+    const validMaps = ['standard', 'random', 'pangaea', 'archipelago', 'rich_coast', 'desert_ring', 'turkey', 'world', 'diamond', 'british_isles', 'gear', 'lakes'];
     if (validMaps.includes(updates.mapType)) {
       game.config.mapType = updates.mapType;
     }
   }
+  persistLobbyToRedis(gameId, game);
   return game;
 }
 
@@ -193,4 +242,90 @@ export function canStartGame(gameId: string): { ok: boolean; reason?: string } {
   if (game.players.length < 2) return { ok: false, reason: 'Need at least 2 players' };
   if (!game.players.every((p) => p.ready)) return { ok: false, reason: 'Not all players are ready' };
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Redis persistence
+// ---------------------------------------------------------------------------
+
+const REDIS_LOBBY_PREFIX = 'lobby:';
+const LOBBY_TTL_SECONDS = 3600; // 1 hour
+
+function persistLobbyToRedis(gameId: string, lobby: GameLobby | null): void {
+  try {
+    const redis = getRedis();
+    if (redis.status !== 'ready') return;
+    if (lobby) {
+      redis.set(REDIS_LOBBY_PREFIX + gameId, JSON.stringify(lobby), 'EX', LOBBY_TTL_SECONDS).catch(() => {});
+    } else {
+      redis.del(REDIS_LOBBY_PREFIX + gameId).catch(() => {});
+    }
+  } catch {
+    // Redis not available — gracefully degrade
+  }
+}
+
+/** Persist all in-memory lobbies to Redis (called periodically). */
+export async function persistAllLobbies(): Promise<void> {
+  try {
+    const redis = getRedis();
+    if (redis.status !== 'ready') return;
+    const pipeline = redis.pipeline();
+    for (const [id, lobby] of lobbyGames) {
+      if (lobby.status === 'lobby') {
+        pipeline.set(REDIS_LOBBY_PREFIX + id, JSON.stringify(lobby), 'EX', LOBBY_TTL_SECONDS);
+      }
+    }
+    await pipeline.exec();
+  } catch {
+    // Silently fail — Redis is optional
+  }
+}
+
+/** Load lobbies from Redis on server startup. */
+export async function loadLobbiesFromRedis(): Promise<number> {
+  try {
+    const redis = getRedis();
+    if (redis.status !== 'ready') return 0;
+    const keys = await redis.keys(REDIS_LOBBY_PREFIX + '*');
+    if (keys.length === 0) return 0;
+    const values = await redis.mget(...keys);
+    let loaded = 0;
+    for (const val of values) {
+      if (!val) continue;
+      try {
+        const lobby: GameLobby = JSON.parse(val);
+        if (lobby.status === 'lobby' && !lobbyGames.has(lobby.id)) {
+          lobbyGames.set(lobby.id, lobby);
+          loaded++;
+        }
+      } catch {
+        // Skip corrupt entries
+      }
+    }
+    console.log(`[Lobby] Loaded ${loaded} lobbies from Redis`);
+    return loaded;
+  } catch {
+    console.warn('[Lobby] Could not load lobbies from Redis');
+    return 0;
+  }
+}
+
+let persistInterval: ReturnType<typeof setInterval> | null = null;
+
+/** Start periodic lobby persistence (every 30s). */
+export function startLobbyPersistence(): void {
+  if (persistInterval) return;
+  persistInterval = setInterval(() => {
+    persistAllLobbies().catch(() => {});
+  }, 30_000);
+  console.log('[Lobby] Periodic persistence enabled (30s interval)');
+}
+
+/** Stop periodic lobby persistence. */
+export function stopLobbyPersistence(): void {
+  if (persistInterval) {
+    clearInterval(persistInterval);
+    persistInterval = null;
+  }
 }

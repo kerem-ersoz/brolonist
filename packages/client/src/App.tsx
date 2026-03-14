@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { LoginPage } from './components/Auth/LoginPage';
 import { LobbyPage } from './components/Lobby/LobbyPage';
 import { GamePage } from './components/Game/GamePage';
@@ -12,6 +13,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export function App() {
   const basename = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
+  const { validateToken } = useAuth();
+
+  useEffect(() => {
+    validateToken();
+  }, [validateToken]);
   return (
     <BrowserRouter basename={basename}>
       <Routes>

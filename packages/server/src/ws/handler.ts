@@ -46,12 +46,36 @@ interface WsMessage {
   seq?: number;
 }
 
+// Rate limiter: track message timestamps per player
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 5000;
+const RATE_LIMIT_MAX_MESSAGES = 30; // 30 messages per 5 seconds
+const MAX_MESSAGE_SIZE = 4096; // 4KB max payload
+
+function isRateLimited(playerId: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(playerId) || [];
+  const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+  recent.push(now);
+  rateLimitMap.set(playerId, recent);
+  return recent.length > RATE_LIMIT_MAX_MESSAGES;
+}
+
 export function handleConnection(ws: WebSocket, playerId: string, playerName: string): void {
   hub.addClient(playerId, playerName, ws);
 
   ws.on('message', (data) => {
     try {
-      const msg: WsMessage = JSON.parse(data.toString());
+      const raw = data.toString();
+      if (raw.length > MAX_MESSAGE_SIZE) {
+        hub.send(playerId, 'error', { code: 'MESSAGE_TOO_LARGE', message: 'Message exceeds size limit' });
+        return;
+      }
+      if (isRateLimited(playerId)) {
+        hub.send(playerId, 'error', { code: 'RATE_LIMITED', message: 'Too many messages, slow down' });
+        return;
+      }
+      const msg: WsMessage = JSON.parse(raw);
       handleMessage(playerId, playerName, msg);
     } catch {
       hub.send(playerId, 'error', { code: 'PARSE_ERROR', message: 'Invalid message format' });
@@ -59,7 +83,12 @@ export function handleConnection(ws: WebSocket, playerId: string, playerName: st
   });
 
   ws.on('close', () => {
-    hub.removeClient(playerId);
+    // Only remove if this is still the active connection for this player
+    // (prevents a stale close event from nuking a newer reconnection)
+    const current = hub.getClient(playerId);
+    if (current?.ws === ws) {
+      hub.removeClient(playerId);
+    }
   });
 }
 
@@ -347,11 +376,20 @@ function handleStartGameFromLobby(playerId: string): void {
   scheduleBotTurn(gameId);
 }
 
+const MAX_CHAT_LENGTH = 300;
+
 function handleChat(playerId: string, payload: { message: string }): void {
   const client = hub.getClient(playerId);
-  if (client?.gameId) {
-    hub.broadcast(client.gameId, 'chat', { playerId, message: payload.message });
-  }
+  if (!client?.gameId) return;
+
+  let msg = typeof payload.message === 'string' ? payload.message : '';
+  msg = msg.trim().slice(0, MAX_CHAT_LENGTH);
+  if (!msg) return;
+
+  // Strip HTML tags to prevent XSS
+  msg = msg.replace(/<[^>]*>/g, '');
+
+  hub.broadcast(client.gameId, 'chat', { playerId, message: msg });
 }
 
 function getGameId(playerId: string): string {

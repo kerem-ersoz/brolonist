@@ -1,5 +1,5 @@
 import type { GameState } from '@brolonist/shared';
-import { calculateLongestRoad } from '@brolonist/shared';
+import { calculateLongestRoad, DevelopmentCardType } from '@brolonist/shared';
 
 // Import free roads tracking from gameHandler
 let _getFreeRoads: ((gameId: string) => number) | null = null;
@@ -19,6 +19,13 @@ export function filterStateForPlayer(state: GameState, playerId: string): unknow
     player.longestRoadLength = calculateLongestRoad(state, player.id);
 
     if (player.id !== playerId) {
+      // Count VP cards before hiding dev cards
+      const vpCardCount = (player.developmentCards as Array<{ type: string }>)?.filter(
+        (c) => c.type === DevelopmentCardType.VictoryPoint
+      ).length ?? 0;
+      // Subtract hidden VP card points from visible victory points
+      player.victoryPoints = (player.victoryPoints ?? 0) - vpCardCount;
+
       const totalResources = Object.values(player.resources as Record<string, number>)
         .reduce((a: number, b: number) => a + b, 0);
       player.resources = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };

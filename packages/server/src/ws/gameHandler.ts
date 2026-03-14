@@ -132,17 +132,17 @@ function logDistribution(state: GameState, distribution: Record<string, Resource
 }
 
 function broadcastState(gameId: string, state: GameState): void {
-  const members = hub.getRoomMembers(gameId);
-  for (const pid of members) {
-    hub.send(pid, 'game_state', filterStateForPlayer(state, pid));
-  }
-
   // Auto-manage turn timer: reset whenever the active player or phase changes
   const timerKey = `${state.currentPlayerIndex}:${state.currentPhase}:${state.turnNumber}:${state.specialBuildCurrentIndex}`;
   const prevKey = lastTimerKey.get(gameId);
   if (timerKey !== prevKey) {
     lastTimerKey.set(gameId, timerKey);
     resetTurnTimer(gameId, state);
+  }
+
+  const members = hub.getRoomMembers(gameId);
+  for (const pid of members) {
+    hub.send(pid, 'game_state', filterStateForPlayer(state, pid));
   }
 }
 
@@ -1051,18 +1051,23 @@ export function handleTradeConfirm(
   if (offer.fromPlayerId !== playerId) return sendError(playerId, 'Only the trade initiator can confirm');
 
   const acceptedResponse = offer.responses[payload.withPlayerId];
-  if (acceptedResponse !== 'accept') return sendError(playerId, 'That player has not accepted the trade');
+  const isCounter = acceptedResponse === 'counter' && offer.counterOffers[payload.withPlayerId];
+  if (acceptedResponse !== 'accept' && !isCounter) return sendError(playerId, 'That player has not accepted or counter-offered');
+
+  // For counter-offers, use the counter terms (their offering = what initiator receives, their requesting = what initiator gives)
+  const tradeOffering = isCounter ? offer.counterOffers[payload.withPlayerId].requesting : offer.offering;
+  const tradeRequesting = isCounter ? offer.counterOffers[payload.withPlayerId].offering : offer.requesting;
 
   // Re-validate both players have resources before executing
   const fromPlayer = state.players.find((p) => p.id === offer.fromPlayerId);
   const toPlayer = state.players.find((p) => p.id === payload.withPlayerId);
   if (!fromPlayer || !toPlayer) return sendError(playerId, 'Player not found');
-  if (!hasResources(fromPlayer.resources, offer.offering))
+  if (!hasResources(fromPlayer.resources, tradeOffering))
     return sendError(playerId, 'You no longer have sufficient resources');
-  if (!hasResources(toPlayer.resources, offer.requesting))
+  if (!hasResources(toPlayer.resources, tradeRequesting))
     return sendError(playerId, 'That player no longer has sufficient resources');
 
-  const tradeError = executeTrade(state, offer.fromPlayerId, payload.withPlayerId, offer.offering, offer.requesting);
+  const tradeError = executeTrade(state, offer.fromPlayerId, payload.withPlayerId, tradeOffering, tradeRequesting);
   if (tradeError) return sendError(playerId, tradeError);
   offer.status = 'completed';
   const fromName = fromPlayer.name || 'Unknown';
@@ -1070,12 +1075,12 @@ export function handleTradeConfirm(
   const fmtR = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
   addLogEntry(state, {
     type: 'trade_completed',
-    message: `${fromName} traded ${fmtR(offer.offering)} with ${toName} for ${fmtR(offer.requesting)}`,
+    message: `${fromName} traded ${fmtR(tradeOffering)} with ${toName} for ${fmtR(tradeRequesting)}`,
     data: {
       fromPlayerId: offer.fromPlayerId,
       toPlayerId: payload.withPlayerId,
-      offering: offer.offering,
-      requesting: offer.requesting,
+      offering: tradeOffering,
+      requesting: tradeRequesting,
     },
   });
   hub.broadcast(gameId, 'trade_completed', { offerId: offer.id, acceptedBy: payload.withPlayerId });

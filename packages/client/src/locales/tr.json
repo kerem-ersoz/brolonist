@@ -2,14 +2,17 @@
   "app": { "title": "Brolonist" },
   "auth": { "login": "Giriş Yap", "guest": "Misafir Olarak Giriş", "guestName": "İsminizi girin", "loginWith": "{{provider}} ile giriş yap", "logout": "Çıkış Yap" },
   "lobby": { "title": "Oyun Lobisi", "createGame": "Oyun Oluştur", "joinGame": "Oyuna Katıl", "gameName": "Oyun Adı", "maxPlayers": "Maksimum Oyuncu", "mapType": "Harita Türü", "victoryPoints": "Zafer Puanı", "private": "Özel Oyun", "password": "Şifre", "turnTimer": "Tur Süresi", "ready": "Hazır", "notReady": "Hazır Değil", "startGame": "Oyunu Başlat", "waitingForPlayers": "Oyuncular bekleniyor...", "addBot": "Bot Ekle", "spectators": "İzleyiciler", "spectating": "İzliyorsunuz", "removeBot": "Botu Kaldır", "slot.empty": "Bekleniyor...", "slot.addBot": "Bot Ekle", "bot.random": "Kolay", "bot.greedy": "Orta", "bot.smart": "Zor", "allReady": "Tüm oyuncular hazır!", "minPlayers": "En az 2 oyuncu gerekli", "host": "Ev Sahibi", "kick": "Çıkar" },
-  "game": { "yourTurn": "Sıra sende!", "rollDice": "Zar At", "endTurn": "Sırayı Bitir", "build": "İnşa Et", "trade": "Ticaret", "buyDevCard": "Gelişim Kartı Al", "playDevCard": "Gelişim Kartı Oyna", "cancel": "İptal" },
+  "game": { "yourTurn": "Sıra sende!", "rollDice": "Zar At", "endTurn": "Sıranı Bitir", "build": "İnşa Et", "trade": "Ticaret", "buyDevCard": "Gelişim Kartı Al", "playDevCard": "Gelişim Kartı Oyna", "cancel": "İptal",
+    "tooltip": { "buildRoad": "Yol İnşa Et", "buildSettlement": "Yerleşim İnşa Et", "buildCity": "Şehir İnşa Et", "buyDevCard": "Gelişim Kartı Al", "endTurn": "Sırayı Bitir" },
+    "phase": { "placeRoad": "Yolunuzu yerleştirin", "placeSettlement": "Yerleşiminizi yerleştirin", "freeRoads": "{{count}} ücretsiz yol yerleştirin (Yol Yapımı)", "moveRobber": "Hırsızı yeni bir alana taşıyın", "discard": "Kartlarınızın yarısını verin", "rollDice": "Zar atın!", "specialBuild": "Özel İnşaat — inşa et veya geç", "specialBuildWait": "Özel İnşaat devam ediyor...", "waiting": "{{name}} bekleniyor..." }
+  },
   "buildings": { "road": "Yol", "settlement": "Yerleşim", "city": "Şehir" },
   "resources": { "brick": "Tuğla", "lumber": "Kereste", "ore": "Maden", "grain": "Tahıl", "wool": "Yün" },
   "trade": { "offer": "Teklif", "give": "Ver", "want": "İste", "propose": "Teklif Et", "accept": "Kabul Et", "decline": "Reddet", "counter": "Karşı Teklif", "bankTrade": "Banka Ticareti", "noOffers": "Aktif teklif yok", "offers": "teklif ediyor", "noResources": "Kaynak yok" },
   "devCards": { "knight": "Şövalye", "victoryPoint": "Zafer Puanı", "roadBuilding": "Yol Yapımı", "yearOfPlenty": "Bolluk Yılı", "monopoly": "Tekel" },
   "map": { "standard": "Standart", "random": "Rastgele", "pangaea": "Pangaea", "archipelago": "Takımadalar", "richCoast": "Zengin Kıyı", "desertRing": "Çöl Halkası", "turkey": "Türkiye", "world": "Dünya", "diamond": "Elmas", "britishIsles": "İngiltere ve İrlanda", "gear": "Vites", "lakes": "Göller" },
   "status": { "connected": "Bağlandı", "reconnecting": "Yeniden bağlanıyor...", "disconnected": "Bağlantı kesildi" },
-  "common": { "players": "Oyuncular", "settings": "Ayarlar", "language": "Dil", "close": "Kapat", "confirm": "Onayla", "back": "Geri" },
+  "common": { "players": "Oyuncular", "settings": "Ayarlar", "language": "Dil", "close": "Kapat", "confirm": "Onayla", "back": "Geri", "backToLobby": "Lobiye dön", "selectMap": "Harita Seç" },
   "errors": {
     "notYourTurn": "Sıra sende değil",
     "insufficientResourcesRoad": "Yol için yeterli kaynak yok (1 tuğla, 1 kereste gerekli)",
@@ -28,6 +31,7 @@
     "cannotBuildInPhase": "Şu anda inşa edemezsiniz",
     "noCardsToSteal": "Komşu oyuncuların çalınacak kartı yok"
   },
+  "player": { "you": "(sen)", "resourceCards": "Kaynak kartları", "developmentCards": "Gelişim kartları", "vp": "ZP", "knightsPlayed": "Oynanan şövalyeler", "largestArmy": "En Büyük Ordu", "longestRoad": "En Uzun Yol", "largest": "(En Büyük)", "longest": "(En Uzun)" },
   "log": {
     "gameLog": "Oyun Kaydı",
     "emptyLog": "Oyun olayları burada görünecek",

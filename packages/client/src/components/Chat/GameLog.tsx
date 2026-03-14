@@ -31,6 +31,19 @@ const RESOURCE_SPRITES: Record<string, string> = {
   _resource_back: assetPath('assets/sprites/resource-card-back.png'),
 };
 
+const DICE_SPRITES: Record<string, string> = {
+  ':dice-1:': assetPath('assets/sprites/dice-1.png'),
+  ':dice-2:': assetPath('assets/sprites/dice-2.png'),
+  ':dice-3:': assetPath('assets/sprites/dice-3.png'),
+  ':dice-4:': assetPath('assets/sprites/dice-4.png'),
+  ':dice-5:': assetPath('assets/sprites/dice-5.png'),
+  ':dice-6:': assetPath('assets/sprites/dice-6.png'),
+};
+
+const OTHER_SPRITES: Record<string, string> = {
+  ':devcard:': assetPath('assets/sprites/dev-card-back.png'),
+};
+
 const RESOURCE_TOKEN: Record<string, string> = {
   brick: ':brick:', lumber: ':lumber:', ore: ':ore:', grain: ':grain:', wool: ':wool:',
 };
@@ -55,9 +68,9 @@ function formatResourceStr(resources?: Record<string, number>): string {
   return parts.join(' ');
 }
 
-/** Renders text with :resource: tokens replaced by inline sprite images */
+/** Renders text with :resource: and :dice-N: tokens replaced by inline sprite images */
 function renderWithSprites(text: string): ReactNode {
-  const pattern = /:(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource):/g;
+  const pattern = /:(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource|dice-[1-6]|devcard):/g;
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -67,13 +80,25 @@ function renderWithSprites(text: string): ReactNode {
       parts.push(text.slice(lastIndex, match.index));
     }
     const token = match[0];
-    const res = TOKEN_TO_RESOURCE[token];
-    if (res && RESOURCE_SPRITES[res]) {
+    const diceSprite = DICE_SPRITES[token];
+    const otherSprite = OTHER_SPRITES[token];
+    if (diceSprite) {
       parts.push(
-        <img key={key++} src={RESOURCE_SPRITES[res]} alt={`:${res}:`} className="inline-block w-4 h-5 object-fill align-text-bottom mx-px rounded-sm" />
+        <img key={key++} src={diceSprite} alt={token} className="inline-block w-5 h-5 object-contain align-text-bottom mx-px" />
+      );
+    } else if (otherSprite) {
+      parts.push(
+        <img key={key++} src={otherSprite} alt={token} className="inline-block w-4 h-5 object-fill align-text-bottom mx-px rounded-sm" />
       );
     } else {
-      parts.push(token);
+      const res = TOKEN_TO_RESOURCE[token];
+      if (res && RESOURCE_SPRITES[res]) {
+        parts.push(
+          <img key={key++} src={RESOURCE_SPRITES[res]} alt={`:${res}:`} className="inline-block w-4 h-5 object-fill align-text-bottom mx-px rounded-sm" />
+        );
+      } else {
+        parts.push(token);
+      }
     }
     lastIndex = pattern.lastIndex;
   }
@@ -94,7 +119,7 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
       return t('log.game_start');
     case 'roll_dice': {
       const dice = data.dice as [number, number] | undefined;
-      const sum = dice ? String(dice[0] + dice[1]) : '';
+      const sum = dice ? `:dice-${dice[0]}::dice-${dice[1]}:` : '';
       return t('log.roll_dice', { sum });
     }
     case 'distribute':
@@ -108,7 +133,7 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
     case 'end_turn':
       return t('log.end_turn');
     case 'buy_dev_card':
-      return t('log.buy_dev_card');
+      return 'bought :devcard:';
     case 'play_dev_card':
       return t('log.play_dev_card', { card: entry.message.replace('Played ', '') });
     case 'move_robber':
@@ -194,6 +219,7 @@ export function GameLog({ entries, playerNames, myPlayerId, onSendChat }: GameLo
           <div className="text-gray-500 text-center py-4">{t('log.emptyLog')}</div>
         )}
         {entries.map((entry, i) => {
+          if (entry.type === 'end_turn') return null;
           const player = entry.playerId ? playerNames[entry.playerId] : null;
           const colorClass = player ? (COLOR_MAP[player.color] || 'text-gray-300') : 'text-gray-500';
           const isChat = entry.type === 'chat';

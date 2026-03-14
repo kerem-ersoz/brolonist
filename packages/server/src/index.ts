@@ -11,6 +11,8 @@ import { healthRoutes } from './routes/health.js';
 import { lobbyRoutes } from './routes/lobby.js';
 import { profileRoutes } from './routes/profile.js';
 import { handleConnection } from './ws/handler.js';
+import { connectRedis } from './store/redis.js';
+import { loadLobbiesFromRedis, startLobbyPersistence } from './lobby/lobbyStore.js';
 
 const app = Fastify({ logger: true });
 
@@ -55,6 +57,11 @@ const port = Number(process.env.PORT) || 8080;
 const host = process.env.HOST || '0.0.0.0';
 
 try {
+  // Connect to Redis and restore lobbies (non-blocking — works without Redis)
+  await connectRedis();
+  await loadLobbiesFromRedis();
+  startLobbyPersistence();
+
   await app.listen({ port, host });
   app.log.info(`Server listening on ${host}:${port}`);
 } catch (err) {

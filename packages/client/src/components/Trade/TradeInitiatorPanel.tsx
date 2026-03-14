@@ -156,9 +156,18 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
                 <span className="text-[10px] text-red-400">❌</span>
               )}
               {countered && counter && (
-                <div className="flex items-center gap-0.5">
-                  <span className="text-yellow-400 text-[10px]">🔄</span>
-                  <ResourceCards resources={counter.offering} />
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-0.5">
+                    <span className="text-yellow-400 text-[10px]">🔄</span>
+                    <ResourceCards resources={counter.offering} />
+                  </div>
+                  <button
+                    onClick={() => onConfirm(offer.id, player.id)}
+                    className="w-7 h-7 rounded-full text-sm font-bold bg-yellow-600 hover:bg-yellow-500 text-white transition-colors flex items-center justify-center"
+                    title="Accept counter-offer"
+                  >
+                    ✓
+                  </button>
                 </div>
               )}
 

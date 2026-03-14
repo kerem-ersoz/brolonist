@@ -2,14 +2,17 @@
   "app": { "title": "Brolonist" },
   "auth": { "login": "Log In", "guest": "Play as Guest", "guestName": "Enter your name", "loginWith": "Log in with {{provider}}", "logout": "Log Out" },
   "lobby": { "title": "Game Lobby", "createGame": "Create Game", "joinGame": "Join Game", "gameName": "Game Name", "maxPlayers": "Max Players", "mapType": "Map Type", "victoryPoints": "Victory Points", "private": "Private Game", "password": "Password", "turnTimer": "Turn Timer", "ready": "Ready", "notReady": "Not Ready", "startGame": "Start Game", "waitingForPlayers": "Waiting for players...", "addBot": "Add Bot", "spectators": "Spectators", "spectating": "Spectating", "removeBot": "Remove Bot", "slot.empty": "Waiting...", "slot.addBot": "Add Bot", "bot.random": "Easy", "bot.greedy": "Medium", "bot.smart": "Hard", "allReady": "All players ready!", "minPlayers": "Need at least 2 players", "host": "Host", "kick": "Kick" },
-  "game": { "yourTurn": "Your turn!", "rollDice": "Roll Dice", "endTurn": "End Turn", "build": "Build", "trade": "Trade", "buyDevCard": "Buy Dev Card", "playDevCard": "Play Dev Card", "cancel": "Cancel" },
+  "game": { "yourTurn": "Your turn!", "rollDice": "Roll Dice", "endTurn": "End Turn", "build": "Build", "trade": "Trade", "buyDevCard": "Buy Dev Card", "playDevCard": "Play Dev Card", "cancel": "Cancel",
+    "tooltip": { "buildRoad": "Build Road", "buildSettlement": "Build Settlement", "buildCity": "Build City", "buyDevCard": "Buy Dev Card", "endTurn": "End Turn" },
+    "phase": { "placeRoad": "Place your road", "placeSettlement": "Place your settlement", "freeRoads": "Place {{count}} free road(s) (Road Building)", "moveRobber": "Move the robber to a new hex", "discard": "Discard half your cards", "rollDice": "Roll the dice!", "specialBuild": "Special Build Phase — build or pass", "specialBuildWait": "Special Build Phase in progress...", "waiting": "Waiting for {{name}}..." }
+  },
   "buildings": { "road": "Road", "settlement": "Settlement", "city": "City" },
   "resources": { "brick": "Brick", "lumber": "Lumber", "ore": "Ore", "grain": "Grain", "wool": "Wool" },
   "trade": { "offer": "Offer", "give": "Give", "want": "Want", "propose": "Propose Trade", "accept": "Accept", "decline": "Decline", "counter": "Counter", "bankTrade": "Bank Trade", "noOffers": "No active offers", "offers": "offers", "noResources": "No resources" },
   "devCards": { "knight": "Knight", "victoryPoint": "Victory Point", "roadBuilding": "Road Building", "yearOfPlenty": "Year of Plenty", "monopoly": "Monopoly" },
   "map": { "standard": "Standard", "random": "Random", "pangaea": "Pangaea", "archipelago": "Archipelago", "richcoast": "Rich Coast", "desertring": "Desert Ring", "turkey": "Türkiye", "world": "World", "diamond": "Diamond", "britishisles": "British Isles", "gear": "Gear", "lakes": "Lakes" },
   "status": { "connected": "Connected", "reconnecting": "Reconnecting...", "disconnected": "Disconnected" },
-  "common": { "players": "Players", "settings": "Settings", "language": "Language", "close": "Close", "confirm": "Confirm", "back": "Back" },
+  "common": { "players": "Players", "settings": "Settings", "language": "Language", "close": "Close", "confirm": "Confirm", "back": "Back", "backToLobby": "Back to lobby", "selectMap": "Select Map" },
   "errors": {
     "notYourTurn": "It's not your turn",
     "insufficientResourcesRoad": "Not enough resources for a road (need 1 brick, 1 lumber)",
@@ -28,6 +31,7 @@
     "cannotBuildInPhase": "You can't build right now",
     "noCardsToSteal": "No adjacent players have any cards to steal"
   },
+  "player": { "you": "(you)", "resourceCards": "Resource cards", "developmentCards": "Development cards", "vp": "VP", "knightsPlayed": "Knights played", "largestArmy": "Largest Army", "longestRoad": "Longest Road", "largest": "(Largest)", "longest": "(Longest)" },
   "log": {
     "gameLog": "Game Log",
     "emptyLog": "Game events will appear here",

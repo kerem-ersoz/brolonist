@@ -195,7 +195,7 @@ function GamePageInner() {
 
       // Steal animations — when I'm the victim, show outgoing; when I'm the thief, show incoming
       if (entry.type === 'steal' && entry.data && entry.playerId) {
-        const thiefId = entry.playerId;
+        const thiefId: string = entry.playerId;
         const victimId = entry.data.victimId as string;
         const resource = entry.data.resource as string;
         if (victimId === myPlayerId && resource) {
@@ -833,12 +833,11 @@ function GamePageInner() {
     }
 
     return (
-      <div className="h-screen bg-gray-900 flex flex-col">
-        <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout} />
-        <div className="flex-1 flex items-center justify-center text-white">
-          <div className="text-center space-y-4">
-            <div className="animate-spin text-4xl">⏳</div>
-            <p>{connectionStatus === 'connected' ? t('lobby.waitingForPlayers') : t('status.reconnecting')}</p>
+      <div className="h-screen relative">
+        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="backdrop-blur-sm border border-gray-700/50 rounded-xl px-8 py-6 shadow-2xl text-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="animate-spin text-3xl mb-3">⏳</div>
+            <p className="text-white text-sm">{connectionStatus === 'connected' ? t('lobby.waitingForPlayers') : t('status.reconnecting')}</p>
           </div>
         </div>
       </div>
@@ -853,29 +852,30 @@ function GamePageInner() {
   // Phase instruction banner
   let phaseHint = '';
   if (freeRoadsRemaining > 0 && myTurn) {
-    phaseHint = `🛣️ Place ${freeRoadsRemaining} free road${freeRoadsRemaining > 1 ? 's' : ''} (Road Building)`;
+    phaseHint = `🛣️ ${t('game.phase.freeRoads', { count: freeRoadsRemaining })}`;
   } else if (isSetup && myTurn) {
     phaseHint = setupAction === 'road'
-      ? '🛣️ Place your road'
-      : '🏠 Place your settlement';
+      ? `🛣️ ${t('game.phase.placeRoad')}`
+      : `🏠 ${t('game.phase.placeSettlement')}`;
   } else if (phase === 'move_robber' && myTurn) {
-    phaseHint = '🏴‍☠️ Move the robber to a new hex';
+    phaseHint = `🏴‍☠️ ${t('game.phase.moveRobber')}`;
   } else if (phase === 'discard') {
-    phaseHint = '✂️ Discard half your cards';
+    phaseHint = `✂️ ${t('game.phase.discard')}`;
   } else if (phase === 'roll_dice' && myTurn) {
-    phaseHint = '🎲 Roll the dice!';
+    phaseHint = `🎲 ${t('game.phase.rollDice')}`;
   } else if (phase === 'special_build' && myTurn) {
-    phaseHint = '🏗️ Special Build Phase — build or pass';
+    phaseHint = `🏗️ ${t('game.phase.specialBuild')}`;
   } else if (phase === 'special_build' && !myTurn) {
-    phaseHint = '🏗️ Special Build Phase in progress...';
+    phaseHint = `🏗️ ${t('game.phase.specialBuildWait')}`;
   } else if (!myTurn && phase !== 'game_over') {
-    phaseHint = `⏳ Waiting for ${currentPlayer?.name || 'opponent'}...`;
+    phaseHint = `⏳ ${t('game.phase.waiting', { name: currentPlayer?.name || 'opponent' })}`;
   }
 
   return (
     <div className="h-screen relative overflow-hidden">
       <div className="absolute top-0 left-0 right-0 z-50">
         <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout}
+          onLeaveGame={() => { window.location.href = '/'; }}
           turnDeadline={(gameState as unknown as Record<string, unknown>).turnDeadline as string | null}
           turnTimerSeconds={gameState.config?.turnTimerSeconds}
         />
@@ -964,7 +964,7 @@ function GamePageInner() {
                 canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
-              title="Build Road"
+              title={t('game.tooltip.buildRoad')}
             >
               <img src={assetPath('assets/sprites/road-white.png')} alt="Road" className="w-full h-full object-contain" />
               {me && <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border border-gray-600">{BUILDING_LIMITS[BuildingType.Road] - me.roadsBuilt}</span>}
@@ -976,7 +976,7 @@ function GamePageInner() {
                 canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
-              title="Build Settlement"
+              title={t('game.tooltip.buildSettlement')}
             >
               <img src={assetPath('assets/sprites/settlement-white.png')} alt="Settlement" className="w-full h-full object-contain" />
               {me && <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border border-gray-600">{BUILDING_LIMITS[BuildingType.Settlement] - me.settlementsBuilt}</span>}
@@ -988,7 +988,7 @@ function GamePageInner() {
                 canBuild ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
-              title="Build City"
+              title={t('game.tooltip.buildCity')}
             >
               <img src={assetPath('assets/sprites/city-white.png')} alt="City" className="w-full h-full object-contain" />
               {me && <span className="absolute -top-1 -right-1 bg-gray-900 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center border border-gray-600">{BUILDING_LIMITS[BuildingType.City] - me.citiesBuilt}</span>}
@@ -999,7 +999,7 @@ function GamePageInner() {
                 canBuyDevCard ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-pointer'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
-              title="Buy Dev Card"
+              title={t('game.tooltip.buyDevCard')}
             >
               <div className="relative" style={{ width: '52%', height: '52%' }}>
                 <img src={assetPath('assets/sprites/dev-card-back.png')} alt="" className="absolute inset-0 w-full h-full object-contain" style={{ transform: 'rotate(-15deg) translateX(-20%)' }} />
@@ -1014,7 +1014,7 @@ function GamePageInner() {
                 canEndTurn ? 'hover:brightness-125 cursor-pointer' : 'opacity-40 cursor-default'
               }`}
               style={{ width: '4.25rem', height: '4.25rem' }}
-              title="End Turn"
+              title={t('game.tooltip.endTurn')}
             >
               <img src={assetPath('assets/sprites/skip-button.png')} alt="End Turn" className="w-full h-full object-contain" />
             </button>

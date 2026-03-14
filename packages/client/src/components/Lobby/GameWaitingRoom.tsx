@@ -1,5 +1,141 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+
+// Miniature hex grid preview for map thumbnails
+const HEX_SIZE = 6;
+function hexToPixel(q: number, r: number): { x: number; y: number } {
+  return { x: HEX_SIZE * (3 / 2 * q), y: HEX_SIZE * (Math.sqrt(3) * (r + q / 2)) };
+}
+function hexPoints(cx: number, cy: number, s: number): string {
+  return Array.from({ length: 6 }, (_, i) => {
+    const angle = (Math.PI / 180) * (60 * i - 30);
+    return `${cx + s * Math.cos(angle)},${cy + s * Math.sin(angle)}`;
+  }).join(' ');
+}
+
+// Standard 19-hex grid (ring 0-2)
+function ring2(): Array<{ q: number; r: number }> {
+  const hexes: Array<{ q: number; r: number }> = [];
+  for (let q = -2; q <= 2; q++) {
+    for (let r = -2; r <= 2; r++) {
+      if (Math.abs(-q - r) <= 2) hexes.push({ q, r });
+    }
+  }
+  return hexes;
+}
+
+// Map-specific hex layouts (simplified for preview)
+const MAP_HEXES: Record<string, Array<{ q: number; r: number }>> = {
+  standard: ring2(),
+  random: ring2(),
+  pangaea: ring2(),
+  rich_coast: ring2(),
+  desert_ring: ring2(),
+  archipelago: [
+    { q: -2, r: 0 }, { q: -2, r: 1 }, { q: -1, r: -1 },
+    { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 },
+    { q: 2, r: -1 }, { q: 2, r: 0 }, { q: 1, r: 1 },
+    { q: 0, r: 2 }, { q: -1, r: 2 }, { q: -2, r: 2 },
+    { q: 0, r: 0 }, { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: 0 }, { q: 0, r: 1 },
+  ],
+  turkey: [
+    { q: -3, r: 1 }, { q: -2, r: 0 }, { q: -2, r: 1 }, { q: -1, r: -1 }, { q: -1, r: 0 }, { q: -1, r: 1 },
+    { q: 0, r: -1 }, { q: 0, r: 0 }, { q: 0, r: 1 }, { q: 1, r: -2 }, { q: 1, r: -1 }, { q: 1, r: 0 },
+    { q: 2, r: -2 }, { q: 2, r: -1 }, { q: 3, r: -3 }, { q: 3, r: -2 },
+  ],
+  world: [
+    ...ring2(),
+    { q: -3, r: 1 }, { q: -3, r: 2 }, { q: 3, r: -2 }, { q: 3, r: -1 },
+    { q: 0, r: -3 }, { q: 0, r: 3 }, { q: -1, r: 3 }, { q: 1, r: -3 },
+  ],
+  diamond: [
+    { q: 0, r: -3 }, { q: 1, r: -3 }, { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -3 },
+    { q: -2, r: -1 }, { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 }, { q: 2, r: -2 },
+    { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 },
+    { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 },
+  ],
+  british_isles: [
+    { q: -1, r: -2 }, { q: 0, r: -2 }, { q: -2, r: 0 }, { q: -1, r: -1 }, { q: 0, r: -1 },
+    { q: -2, r: 1 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: -1 },
+    { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 0 }, { q: 1, r: 1 },
+    { q: -1, r: 2 }, { q: 0, r: 2 },
+    { q: 2, r: -2 }, { q: 2, r: -1 }, { q: 3, r: -2 },
+  ],
+  gear: [
+    ...ring2(),
+    { q: 0, r: -3 }, { q: 3, r: -3 }, { q: 3, r: 0 }, { q: 0, r: 3 }, { q: -3, r: 3 }, { q: -3, r: 0 },
+  ],
+  lakes: ring2(),
+};
+
+const ALL_MAP_TYPES = ['standard','random','pangaea','archipelago','rich_coast','desert_ring','turkey','world','diamond','british_isles','gear','lakes'] as const;
+
+function MapPreview({ mapType, size = 48 }: { mapType: string; size?: number }): ReactNode {
+  const hexes = MAP_HEXES[mapType] || MAP_HEXES.standard;
+  const pixels = hexes.map(h => hexToPixel(h.q, h.r));
+  const minX = Math.min(...pixels.map(p => p.x)) - HEX_SIZE;
+  const maxX = Math.max(...pixels.map(p => p.x)) + HEX_SIZE;
+  const minY = Math.min(...pixels.map(p => p.y)) - HEX_SIZE;
+  const maxY = Math.max(...pixels.map(p => p.y)) + HEX_SIZE;
+  const vw = maxX - minX;
+  const vh = maxY - minY;
+  return (
+    <svg width={size} height={size} viewBox={`${minX} ${minY} ${vw} ${vh}`} className="flex-shrink-0">
+      {hexes.map((h, i) => {
+        const p = hexToPixel(h.q, h.r);
+        return <polygon key={i} points={hexPoints(p.x, p.y, HEX_SIZE * 0.9)} fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.4)" strokeWidth="0.5" />;
+      })}
+    </svg>
+  );
+}
+
+function MapPickerButton({ currentMap, onSelect }: { currentMap: string; onSelect: (map: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full mt-1 flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white rounded px-2 py-1.5 text-sm border border-gray-600 transition-colors"
+      >
+        <MapPreview mapType={currentMap} size={28} />
+        <span className="flex-1 text-left">{t(`map.${currentMap}`)}</span>
+        <span className="text-gray-400 text-xs">▼</span>
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={() => setOpen(false)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="relative backdrop-blur-sm border border-gray-700/50 rounded-xl p-4 shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto"
+            style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold text-sm">{t('common.selectMap')}</h3>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {ALL_MAP_TYPES.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { onSelect(m); setOpen(false); }}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all ${
+                    m === currentMap
+                      ? 'border-amber-500 bg-amber-900/30'
+                      : 'border-gray-700/50 hover:border-gray-500 hover:bg-white/5'
+                  }`}
+                >
+                  <MapPreview mapType={m} size={56} />
+                  <span className="text-white text-[11px] font-medium text-center leading-tight">{t(`map.${m}`)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 interface LobbyPlayerView {
   id: string;
@@ -220,19 +356,19 @@ export function GameWaitingRoom({
               <div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400">{t('lobby.mapType')}</span>
-                  {!isHost && <span>{t(`map.${lobby.config.mapType}`)}</span>}
+                  {!isHost && (
+                    <div className="flex items-center gap-2">
+                      <MapPreview mapType={lobby.config.mapType} size={24} />
+                      <span>{t(`map.${lobby.config.mapType}`)}</span>
+                    </div>
+                  )}
                 </div>
-                {isHost ? (
-                  <select
-                    value={lobby.config.mapType}
-                    onChange={(e) => onUpdateConfig({ mapType: e.target.value })}
-                    className="w-full mt-1 bg-gray-700 text-white rounded px-2 py-1 text-sm border border-gray-600"
-                  >
-                    {['standard','random','pangaea','archipelago','rich_coast','desert_ring','turkey','world','diamond','british_isles','gear','lakes'].map(m => (
-                      <option key={m} value={m}>{t(`map.${m.replace('_','')}` as never) || m}</option>
-                    ))}
-                  </select>
-                ) : null}
+                {isHost && (
+                  <MapPickerButton
+                    currentMap={lobby.config.mapType}
+                    onSelect={(m) => onUpdateConfig({ mapType: m })}
+                  />
+                )}
               </div>
               <div>
                 <div className="flex justify-between items-center">

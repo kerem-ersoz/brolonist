@@ -49,6 +49,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
     pendingStealTargets: [],
     specialBuildOrder: [],
     specialBuildCurrentIndex: 0,
+    specialBuildRequests: [],
     log: [],
     turnDeadline: null,
     ...overrides,

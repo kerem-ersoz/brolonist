@@ -1,5 +1,5 @@
 import { assetPath } from '../../utils/sprites';
-import { useState, useCallback, useMemo, useEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Board as BoardType, HexCoord, VertexDirection, EdgeDirection } from '@brolonist/shared';
@@ -130,7 +130,7 @@ function GamePageInner() {
   const [animationItems, setAnimationItems] = useState<ResourceAnimationItem[]>([]);
   const prevLogLengthRef = useRef(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!gameState || !myPlayerId) return;
     const logLen = gameState.log.length;
     const prevLen = prevLogLengthRef.current;
@@ -152,75 +152,110 @@ function GamePageInner() {
         });
       }
 
-      // Trade animations — only when I'm involved
+      // Trade animations — outgoing + incoming for my involvement
       if (entry.type === 'trade_completed' && entry.data) {
         const fromId = entry.data.fromPlayerId as string;
         const toId = entry.data.toPlayerId as string;
-        if (fromId === myPlayerId || toId === myPlayerId) {
-          newItems.push({
-            kind: 'trade',
-            id: `${entry.timestamp}-trade`,
-            fromPlayerId: fromId,
-            toPlayerId: toId,
-            offering: entry.data.offering as Record<string, number>,
-            requesting: entry.data.requesting as Record<string, number>,
-            myPlayerId,
-          });
+        const offering = entry.data.offering as Record<string, number>;
+        const requesting = entry.data.requesting as Record<string, number>;
+        if (fromId === myPlayerId) {
+          // I proposed: I give offering, I receive requesting
+          newItems.push({ kind: 'outgoing', id: `${entry.timestamp}-trade-out`, resources: offering });
+          newItems.push({ kind: 'distribute', id: `${entry.timestamp}-trade-in`, playerId: myPlayerId, resources: requesting, isMe: true });
+        } else if (toId === myPlayerId) {
+          // I accepted: I give requesting, I receive offering
+          newItems.push({ kind: 'outgoing', id: `${entry.timestamp}-trade-out`, resources: requesting });
+          newItems.push({ kind: 'distribute', id: `${entry.timestamp}-trade-in`, playerId: myPlayerId, resources: offering, isMe: true });
         }
       }
 
-      // Steal animations — card flies from victim to thief
+      // Bank trade — outgoing giving + incoming receiving
+      if (entry.type === 'trade_bank' && entry.data && entry.playerId === myPlayerId) {
+        const giving = entry.data.giving as string;
+        const givingCount = entry.data.givingCount as number;
+        const receiving = entry.data.receiving as string;
+        const outRes: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+        outRes[giving] = givingCount;
+        newItems.push({ kind: 'outgoing', id: `${entry.timestamp}-bank-out`, resources: outRes });
+        const inRes: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+        inRes[receiving] = 1;
+        newItems.push({ kind: 'distribute', id: `${entry.timestamp}-bank-in`, playerId: myPlayerId, resources: inRes, isMe: true });
+      }
+
+      // Build animations — cards spent slide out of hand
+      if ((entry.type === 'place_settlement' || entry.type === 'place_road' || entry.type === 'place_city') 
+          && entry.data?.cost && entry.playerId === myPlayerId) {
+        newItems.push({ kind: 'outgoing', id: `${entry.timestamp}-build-out`, resources: entry.data.cost as Record<string, number> });
+      }
+
+      // Dev card purchase — cards spent slide out of hand
+      if (entry.type === 'buy_dev_card' && entry.data?.cost && entry.playerId === myPlayerId) {
+        newItems.push({ kind: 'outgoing', id: `${entry.timestamp}-devbuy-out`, resources: entry.data.cost as Record<string, number> });
+      }
+
+      // Steal animations — when I'm the victim, show outgoing; when I'm the thief, show incoming
       if (entry.type === 'steal' && entry.data && entry.playerId) {
         const thiefId = entry.playerId;
         const victimId = entry.data.victimId as string;
         const resource = entry.data.resource as string;
-        if (thiefId === myPlayerId || victimId === myPlayerId) {
+        if (victimId === myPlayerId && resource) {
           const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
-          if (resource) resources[resource] = 1;
+          resources[resource] = 1;
           newItems.push({
-            kind: 'trade',
-            id: `${entry.timestamp}-steal`,
-            fromPlayerId: victimId,  // victim "gives"
-            toPlayerId: thiefId,     // thief "receives"
-            offering: resources,     // what victim loses
-            requesting: {},          // thief gives nothing
-            myPlayerId,
-            isSteal: true,
+            kind: 'outgoing',
+            id: `${entry.timestamp}-steal-out`,
+            resources,
+          });
+        } else if (thiefId === myPlayerId && resource) {
+          const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+          resources[resource] = 1;
+          newItems.push({
+            kind: 'distribute',
+            id: `${entry.timestamp}-steal-in`,
+            playerId: myPlayerId,
+            resources,
+            isMe: true,
           });
         }
       }
 
-      // Dev card purchase animation — card flies to player's hand
-      if (entry.type === 'buy_dev_card' && entry.playerId === myPlayerId) {
+      // Discard animation — cards slide out of hand
+      if (entry.type === 'discard' && entry.data?.resources && entry.playerId === myPlayerId) {
         newItems.push({
-          kind: 'distribute',
-          id: `${entry.timestamp}-devcard`,
-          playerId: myPlayerId,
-          resources: { devcard: 1 },
-          isMe: true,
+          kind: 'outgoing',
+          id: `${entry.timestamp}-discard`,
+          resources: entry.data.resources as Record<string, number>,
         });
       }
 
-      // Monopoly animations — cards fly from each victim to the monopoly player
+      // Monopoly animations — slide in/out based on whether I'm the monopolist or a victim
       if (entry.type === 'monopoly' && entry.data && entry.playerId) {
         const monopolist: string = entry.playerId;
         const resourceType = entry.data.resourceType as string;
         const perPlayer = entry.data.perPlayer as Record<string, number>;
-        if (monopolist === myPlayerId || (perPlayer && Object.keys(perPlayer).includes(myPlayerId))) {
-          for (const [victimId, amount] of Object.entries(perPlayer || {})) {
-            if (amount <= 0) continue;
+        if (monopolist === myPlayerId) {
+          // I played monopoly — cards slide into my hand
+          const total = Object.values(perPlayer || {}).reduce((a, b) => a + b, 0);
+          if (total > 0) {
             const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
-            resources[resourceType] = amount;
+            resources[resourceType] = total;
             newItems.push({
-              kind: 'trade',
-              id: `${entry.timestamp}-monopoly-${victimId}`,
-              fromPlayerId: victimId,
-              toPlayerId: monopolist,
-              offering: resources,
-              requesting: {},
-              myPlayerId,
+              kind: 'distribute',
+              id: `${entry.timestamp}-monopoly-in`,
+              playerId: myPlayerId,
+              resources,
+              isMe: true,
             });
           }
+        } else if (perPlayer && myPlayerId in perPlayer && perPlayer[myPlayerId] > 0) {
+          // I'm a victim — cards slide out of my hand
+          const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+          resources[resourceType] = perPlayer[myPlayerId];
+          newItems.push({
+            kind: 'outgoing',
+            id: `${entry.timestamp}-monopoly-out`,
+            resources,
+          });
         }
       }
     }
@@ -261,11 +296,34 @@ function GamePageInner() {
     return pending;
   }, [animationItems]);
 
+  // Compute pending outgoing resources (cards being removed, keep them visible during animation)
+  const pendingOutgoing = useMemo(() => {
+    const pending: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    for (const item of animationItems) {
+      if (item.kind === 'outgoing') {
+        for (const [res, count] of Object.entries(item.resources)) {
+          if (count > 0) pending[res] = (pending[res] || 0) + count;
+        }
+      }
+    }
+    return pending;
+  }, [animationItems]);
+
   const phase = gameState?.currentPhase || '';
   const isSetup = phase === 'setup_forward' || phase === 'setup_reverse';
   const setupAction = (gameState as unknown as Record<string, unknown>)?.setupAction as string | undefined;
   const myTurn = isMyTurn();
   const freeRoadsRemaining = (gameState?.freeRoadsRemaining as number) || 0;
+
+  // Clear hand selection when phase changes (after trade, discard, etc.)
+  const prevPhaseRef = useRef(phase);
+  useEffect(() => {
+    if (prevPhaseRef.current !== phase) {
+      prevPhaseRef.current = phase;
+      setHandSelection({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });
+      setClearSelectionCounter((c) => c + 1);
+    }
+  }, [phase]);
 
   // Discard mode
   const mustDiscard = phase === 'discard' && !!myPlayerId && (gameState?.pendingDiscards ?? []).includes(myPlayerId);
@@ -322,13 +380,13 @@ function GamePageInner() {
 
       // Helper: get adjacent vertex keys for distance rule
       const adjVertexKeys = (q: number, r: number, dir: string): string[] => {
-        if (dir === 'N') return [`${q},${r - 1},S`, `${q + 1},${r - 1},S`, `${q},${r},S`];
-        return [`${q},${r + 1},N`, `${q - 1},${r + 1},N`, `${q},${r},N`];
+        if (dir === 'N') return [`${q},${r - 1},S`, `${q + 1},${r - 1},S`, `${q + 1},${r - 2},S`];
+        return [`${q},${r + 1},N`, `${q - 1},${r + 1},N`, `${q - 1},${r + 2},N`];
       };
       // Helper: get adjacent edge keys for connectivity
       const adjEdgeKeys = (q: number, r: number, dir: string): string[] => {
         if (dir === 'N') return [`${q},${r},NE`, `${q},${r - 1},SE`, `${q},${r - 1},E`];
-        return [`${q},${r},SE`, `${q - 1},${r + 1},NE`, `${q - 1},${r},E`];
+        return [`${q},${r},SE`, `${q - 1},${r + 1},NE`, `${q - 1},${r + 1},E`];
       };
 
       for (const coord of allCoords) {
@@ -425,7 +483,7 @@ function GamePageInner() {
         const [qs, rs, dir] = vKey.split(',');
         const q = parseInt(qs), r = parseInt(rs);
         if (dir === 'N') return [`${q},${r},NE`, `${q},${r - 1},SE`, `${q},${r - 1},E`];
-        return [`${q},${r},SE`, `${q - 1},${r + 1},NE`, `${q - 1},${r},E`];
+        return [`${q},${r},SE`, `${q - 1},${r + 1},NE`, `${q - 1},${r + 1},E`];
       };
 
       const allCoords = [
@@ -465,8 +523,21 @@ function GamePageInner() {
 
   const canRoll = myTurn && phase === 'roll_dice';
   const canTrade = myTurn && phase === 'trade_and_build';
-  const canEndTurn = myTurn && phase === 'trade_and_build';
-  const canBuyDevCard = canBuild;
+  const canEndTurn = myTurn && (phase === 'trade_and_build' || phase === 'special_build');
+  const canBuyDevCard = canBuild && phase !== 'special_build';
+
+  // Special build opt-in toggle (5+ players)
+  const is5PlusGame = (gameState?.players.length ?? 0) >= 5;
+  const hasRequestedSpecialBuild = (gameState?.specialBuildRequests ?? []).includes(myPlayerId ?? '');
+  const canToggleSpecialBuild = is5PlusGame && !isSetup && phase !== 'game_over' && phase !== 'special_build';
+
+  const handleToggleSpecialBuild = useCallback(() => {
+    if (hasRequestedSpecialBuild) {
+      sendMessage('cancel_special_build');
+    } else {
+      sendMessage('request_special_build');
+    }
+  }, [sendMessage, hasRequestedSpecialBuild]);
 
   // Auto-open trade modal when player selects cards in hand
   useEffect(() => {
@@ -494,8 +565,12 @@ function GamePageInner() {
   const handleEndTurn = useCallback(() => {
     setBuildMode(null);
     setGhostPlacement(null);
-    sendMessage('end_turn');
-  }, [sendMessage]);
+    if (phase === 'special_build') {
+      sendMessage('pass_special_build');
+    } else {
+      sendMessage('end_turn');
+    }
+  }, [sendMessage, phase]);
   const handleBuyDevCard = useCallback(() => {
     if (!canBuild) {
       addNotification(t('errors.cannotBuildInPhase'));
@@ -789,16 +864,22 @@ function GamePageInner() {
     phaseHint = '✂️ Discard half your cards';
   } else if (phase === 'roll_dice' && myTurn) {
     phaseHint = '🎲 Roll the dice!';
+  } else if (phase === 'special_build' && myTurn) {
+    phaseHint = '🏗️ Special Build Phase — build or pass';
+  } else if (phase === 'special_build' && !myTurn) {
+    phaseHint = '🏗️ Special Build Phase in progress...';
   } else if (!myTurn && phase !== 'game_over') {
     phaseHint = `⏳ Waiting for ${currentPlayer?.name || 'opponent'}...`;
   }
 
   return (
-    <div className="h-screen flex flex-col relative overflow-hidden">
-      <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout}
-        turnDeadline={(gameState as unknown as Record<string, unknown>).turnDeadline as string | null}
-        turnTimerSeconds={gameState.config?.turnTimerSeconds}
-      />
+    <div className="h-screen relative overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 z-50">
+        <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout}
+          turnDeadline={(gameState as unknown as Record<string, unknown>).turnDeadline as string | null}
+          turnTimerSeconds={gameState.config?.turnTimerSeconds}
+        />
+      </div>
 
       <GameLayout
         phaseHint={phaseHint}
@@ -827,9 +908,11 @@ function GamePageInner() {
             <PlayerHand
               resources={Object.fromEntries(
                 Object.entries(me.resources as unknown as Record<string, number>).map(
-                  ([r, count]) => [r, Math.max(0, count - (pendingIncoming[r] || 0))]
+                  ([r, count]) => [r, Math.max(0, count - (pendingIncoming[r] || 0)) + (pendingOutgoing[r] || 0)]
                 )
               )}
+              incomingCards={animationItems.some(it => it.kind === 'distribute' && it.isMe) ? pendingIncoming : undefined}
+              outgoingCards={animationItems.some(it => it.kind === 'outgoing') ? pendingOutgoing : undefined}
               developmentCards={me.developmentCards as Array<{ type: string; turnPurchased?: number }>}
               turnNumber={gameState.turnNumber}
               isMyTurn={myTurn}
@@ -842,15 +925,35 @@ function GamePageInner() {
               onPlayDevCard={handlePlayDevCard}
               onSelectionChange={setHandSelection}
               clearSelection={clearSelectionCounter}
+              selectable={myTurn && phase === 'trade_and_build'}
               discardMode={mustDiscard}
               discardMax={discardCount}
             />
           ) : null
         }
         dice={
-          canRoll
-            ? <DiceDisplay dice={null} canRoll onRoll={handleRollDice} />
-            : gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null
+          <div className="flex items-center gap-2">
+            {is5PlusGame && (
+              <button
+                onClick={canToggleSpecialBuild ? handleToggleSpecialBuild : undefined}
+                disabled={!canToggleSpecialBuild}
+                className={`pointer-events-auto px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                  hasRequestedSpecialBuild
+                    ? 'bg-amber-600 text-white'
+                    : canToggleSpecialBuild
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      : 'bg-gray-800 text-gray-500 cursor-default'
+                }`}
+                title={hasRequestedSpecialBuild ? 'Cancel Special Build Request' : 'Request Special Build'}
+              >
+                🏗️ {hasRequestedSpecialBuild ? 'SB ✓' : 'SB'}
+              </button>
+            )}
+            {canRoll
+              ? <DiceDisplay dice={null} canRoll onRoll={handleRollDice} />
+              : gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null
+            }
+          </div>
         }
         endTurnButton={
           <div className="flex gap-2">
@@ -923,6 +1026,7 @@ function GamePageInner() {
               <GameLog
                 entries={gameState.log}
                 playerNames={playerNames}
+                myPlayerId={myPlayerId}
                 onSendChat={(message) => sendMessage('chat', { message })}
               />
             }
@@ -993,7 +1097,6 @@ function GamePageInner() {
         <DiscardPanel
           discardCount={discardCount}
           selectedCount={Object.values(handSelection).reduce((a, b) => a + b, 0)}
-          timerSeconds={15}
           onConfirm={() => {
             sendMessage('discard_cards', { resources: handSelection });
             setHandSelection({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });

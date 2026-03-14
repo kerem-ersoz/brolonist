@@ -32,7 +32,7 @@ export function Navbar({ userName, connectionStatus, onLogout, turnDeadline, tur
   }, [turnDeadline]);
 
   return (
-    <nav className="bg-gray-800 px-4 py-2 flex items-center justify-between">
+    <nav className="px-4 py-2 flex items-center justify-between border-b border-gray-700/50 backdrop-blur-sm" style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}>
       <span className="text-white font-bold">{t('app.title')}</span>
       <div className="flex items-center gap-3">
         {turnDeadline && secondsLeft > 0 ? (

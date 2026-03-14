@@ -166,6 +166,7 @@ export interface GameState {
 
   specialBuildOrder: PlayerId[];
   specialBuildCurrentIndex: number;
+  specialBuildRequests: PlayerId[];
 
   log: GameLogEntry[];
 

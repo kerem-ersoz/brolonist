@@ -12,6 +12,8 @@ import {
   totalCards,
   BuildingType,
   Resources,
+  ResourceType,
+  ALL_RESOURCES,
 } from '../types/resources.js';
 import {
   VertexDirection,
@@ -46,14 +48,21 @@ export function rollDice(): [number, number] {
   return [Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1];
 }
 
+export interface DistributeResult {
+  distribution: Record<string, Resources>;
+  blockedResources: ResourceType[];
+}
+
 /**
  * Distribute resources based on dice roll.
  * Returns per-player resource gains and applies them to player state.
+ * If the bank does not have enough of a resource to fulfil all entitled players,
+ * that resource is not distributed to anyone (official Catan rule).
  */
 export function distributeResources(
   state: GameState,
   diceSum: number,
-): Record<string, Resources> {
+): DistributeResult {
   // Iterate all vertex buildings and check which producing hexes they touch.
   const finalDistribution: Record<string, Resources> = {};
 
@@ -84,6 +93,30 @@ export function distributeResources(
     }
   }
 
+  // Compute bank supply: 19 per resource minus all players' holdings
+  const bankSupply = emptyResources();
+  for (const r of ALL_RESOURCES) bankSupply[r] = 19;
+  for (const p of state.players) {
+    for (const r of ALL_RESOURCES) bankSupply[r] -= p.resources[r];
+  }
+
+  // Check total demand per resource; if demand exceeds bank supply, block that resource
+  const totalDemand = emptyResources();
+  for (const resources of Object.values(finalDistribution)) {
+    for (const r of ALL_RESOURCES) totalDemand[r] += resources[r];
+  }
+
+  const blockedResources: ResourceType[] = [];
+  for (const r of ALL_RESOURCES) {
+    if (totalDemand[r] > 0 && totalDemand[r] > bankSupply[r]) {
+      blockedResources.push(r);
+      // Zero out this resource for all players
+      for (const resources of Object.values(finalDistribution)) {
+        resources[r] = 0;
+      }
+    }
+  }
+
   // Apply distribution to player resources
   for (const [playerId, resources] of Object.entries(finalDistribution)) {
     const player = state.players.find((p) => p.id === playerId);
@@ -92,7 +125,7 @@ export function distributeResources(
     }
   }
 
-  return finalDistribution;
+  return { distribution: finalDistribution, blockedResources };
 }
 
 /** Check which players must discard (>7 cards when 7 is rolled). */
@@ -114,11 +147,15 @@ export function endTurn(state: GameState): void {
 
   state.activeTradeOffers = [];
 
-  if (state.players.length >= 5) {
+  // Only enter special build if 5+ players AND at least one player opted in
+  const optedIn = state.specialBuildRequests.filter(
+    (id) => id !== player.id && state.players.some((p) => p.id === id && p.status !== PlayerStatus.Quit),
+  );
+  state.specialBuildRequests = [];
+
+  if (state.players.length >= 5 && optedIn.length > 0) {
     state.currentPhase = GamePhase.SpecialBuild;
-    state.specialBuildOrder = state.players
-      .filter((p) => p.status !== PlayerStatus.Quit && p.id !== player.id)
-      .map((p) => p.id);
+    state.specialBuildOrder = optedIn;
     state.specialBuildCurrentIndex = 0;
   } else {
     state.currentPlayerIndex = nextPlayerIndex(state);

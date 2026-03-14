@@ -16,12 +16,10 @@ import {
 export function canBuyDevCard(state: GameState, playerId: string): string | null {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return 'Player not found';
+  if (state.currentPhase === GamePhase.SpecialBuild) return 'Cannot buy dev cards during special build';
   const current = getCurrentPlayer(state);
   if (current.id !== playerId) return 'Not your turn';
-  if (
-    state.currentPhase !== GamePhase.TradeAndBuild &&
-    state.currentPhase !== GamePhase.SpecialBuild
-  )
+  if (state.currentPhase !== GamePhase.TradeAndBuild)
     return 'Cannot buy in this phase';
   if (!hasResources(player.resources, DEV_CARD_COST)) return 'Insufficient resources';
   if (state.developmentDeck.length === 0) return 'No development cards remaining';

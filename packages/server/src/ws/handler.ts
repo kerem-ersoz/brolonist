@@ -17,6 +17,8 @@ import {
   handleTradeWithBank,
   handleEndTurn,
   handlePassSpecialBuild,
+  handleRequestSpecialBuild,
+  handleCancelSpecialBuild,
   handleDevGiveResources,
   handleDevGiveDevCard,
   handleDevRollSeven,
@@ -141,6 +143,12 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
       break;
     case 'pass_special_build':
       handlePassSpecialBuild(playerId, getGameId(playerId));
+      break;
+    case 'request_special_build':
+      handleRequestSpecialBuild(playerId, getGameId(playerId));
+      break;
+    case 'cancel_special_build':
+      handleCancelSpecialBuild(playerId, getGameId(playerId));
       break;
     // Dev/debug actions (dev mode only)
     case 'dev_give_resources':

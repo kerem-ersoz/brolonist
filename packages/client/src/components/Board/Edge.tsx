@@ -34,7 +34,7 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, ho
     const mx = (p1.x + p2.x) / 2;
     const my = (p1.y + p2.y) / 2;
     const length = Math.sqrt(dx * dx + dy * dy);
-    const displayLength = length * 0.8;
+    const displayLength = length * 0.9;
 
     return (
       <g pointerEvents="none" filter="url(#road-glow)">

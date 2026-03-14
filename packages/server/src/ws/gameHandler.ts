@@ -17,6 +17,7 @@ import {
   ResourceType,
   BuildingType,
   BUILDING_COSTS,
+  DEV_CARD_COST,
   createPlayer,
   getCurrentPlayer,
   generateBoard,
@@ -74,6 +75,7 @@ import {
   subtractResources,
   addResources,
   vertexAdjacentEdges,
+  TERRAIN_RESOURCE,
 } from '@brolonist/shared';
 
 import { hub } from './hub.js';
@@ -136,7 +138,7 @@ function broadcastState(gameId: string, state: GameState): void {
   }
 
   // Auto-manage turn timer: reset whenever the active player or phase changes
-  const timerKey = `${state.currentPlayerIndex}:${state.currentPhase}:${state.turnNumber}`;
+  const timerKey = `${state.currentPlayerIndex}:${state.currentPhase}:${state.turnNumber}:${state.specialBuildCurrentIndex}`;
   const prevKey = lastTimerKey.get(gameId);
   if (timerKey !== prevKey) {
     lastTimerKey.set(gameId, timerKey);
@@ -194,6 +196,16 @@ function broadcastAndCheckVictory(gameId: string, state: GameState): void {
 
 const ROLL_TIMER_SECONDS = 5;
 const ROBBER_TIMER_SECONDS = 30;
+const SPECIAL_BUILD_TIMER_SECONDS = 25;
+const DISCARD_TIMER_SECONDS = 15;
+
+/** Return true if the player is allowed to act: either the current player, or the active special-build player. */
+function isActivePlayer(state: GameState, playerId: string): boolean {
+  if (state.currentPhase === GamePhase.SpecialBuild) {
+    return state.specialBuildOrder[state.specialBuildCurrentIndex] === playerId;
+  }
+  return getCurrentPlayer(state).id === playerId;
+}
 
 function resetTurnTimer(gameId: string, state: GameState): void {
   const seconds = state.config.turnTimerSeconds;
@@ -244,6 +256,50 @@ function resetTurnTimer(gameId: string, state: GameState): void {
     return;
   }
 
+  // Discard phase gets a fixed 15-second timer
+  if (state.currentPhase === GamePhase.Discard) {
+    const deadline = new Date(Date.now() + DISCARD_TIMER_SECONDS * 1000).toISOString();
+    state.turnDeadline = deadline;
+
+    startTurnTimer(gameId, DISCARD_TIMER_SECONDS * 1000, () => {
+      const s = games.get(gameId);
+      if (!s || s.currentPhase !== GamePhase.Discard) return;
+      for (const pid of [...s.pendingDiscards]) {
+        const player = s.players.find(p => p.id === pid);
+        if (!player) continue;
+        const count = Math.floor(totalCards(player.resources) / 2);
+        autoDiscardRandom(player, count);
+        s.pendingDiscards = s.pendingDiscards.filter(id => id !== pid);
+        addLogEntry(s, { type: 'discard', message: 'Auto-discarded (time expired)', playerId: pid });
+      }
+      if (s.pendingDiscards.length === 0) {
+        transitionPhase(s, GamePhase.MoveRobber);
+      }
+      broadcastAndCheckVictory(gameId, s);
+      scheduleBotTurn(gameId);
+    });
+    return;
+  }
+
+  // Special build phase always gets a fixed 25-second timer
+  if (state.currentPhase === GamePhase.SpecialBuild) {
+    const deadline = new Date(Date.now() + SPECIAL_BUILD_TIMER_SECONDS * 1000).toISOString();
+    state.turnDeadline = deadline;
+
+    startTurnTimer(gameId, SPECIAL_BUILD_TIMER_SECONDS * 1000, () => {
+      const s = games.get(gameId);
+      if (!s || s.currentPhase !== GamePhase.SpecialBuild) return;
+      const sbPlayerId = s.specialBuildOrder[s.specialBuildCurrentIndex];
+      if (sbPlayerId) {
+        advanceSpecialBuild(s);
+        addLogEntry(s, { type: 'pass_special_build', message: 'Passed special build (timeout)', playerId: sbPlayerId });
+        broadcastState(gameId, s);
+        scheduleBotTurn(gameId);
+      }
+    });
+    return;
+  }
+
   if (!seconds || seconds <= 0) {
     state.turnDeadline = null;
     clearTurnTimer(gameId);
@@ -262,22 +318,6 @@ function resetTurnTimer(gameId: string, state: GameState): void {
     // Auto-action based on current phase
     if (s.currentPhase === GamePhase.TradeAndBuild) {
       handleEndTurn(current.id, gameId);
-    } else if (s.currentPhase === GamePhase.Discard) {
-      for (const pid of [...s.pendingDiscards]) {
-        const player = s.players.find(p => p.id === pid);
-        if (!player) continue;
-        const total = Object.values(player.resources).reduce((a, b) => a + b, 0);
-        const discardCount = Math.floor(total / 2);
-        const toDiscard: Record<string, number> = {};
-        let remaining = discardCount;
-        for (const [res, count] of Object.entries(player.resources)) {
-          const take = Math.min(count, remaining);
-          if (take > 0) toDiscard[res] = take;
-          remaining -= take;
-          if (remaining <= 0) break;
-        }
-        handleDiscardCards(pid, gameId, { resources: toDiscard as Resources });
-      }
     } else {
       engineEndTurn(s);
       addLogEntry(s, { type: 'end_turn', message: 'Turn ended (timeout)', playerId: current.id });
@@ -367,6 +407,7 @@ export function initializeGame(
     pendingStealTargets: [],
     specialBuildOrder: [],
     specialBuildCurrentIndex: 0,
+    specialBuildRequests: [],
     log: [],
     turnDeadline: null,
   };
@@ -456,7 +497,14 @@ export function handleRollDice(playerId: string, gameId: string): void {
       transitionPhase(state, GamePhase.MoveRobber);
     }
   } else {
-    const distribution = distributeResources(state, diceSum);
+    const { distribution, blockedResources } = distributeResources(state, diceSum);
+    for (const res of blockedResources) {
+      addLogEntry(state, {
+        type: 'bank_shortage',
+        message: `Bank has no ${res} left — no ${res} distributed`,
+        data: { resource: res },
+      });
+    }
     logDistribution(state, distribution);
     transitionPhase(state, GamePhase.TradeAndBuild);
   }
@@ -488,8 +536,7 @@ export function handlePlaceSettlement(
     if (state.currentPhase !== GamePhase.TradeAndBuild && state.currentPhase !== GamePhase.SpecialBuild) {
       return sendError(playerId, 'Cannot build in this phase');
     }
-    const current = getCurrentPlayer(state);
-    if (current.id !== playerId) return sendError(playerId, 'Not your turn');
+    if (!isActivePlayer(state, playerId)) return sendError(playerId, 'Not your turn');
 
     const error = canPlaceSettlement(state, playerId, payload.vertex, false);
     if (error) return sendError(playerId, error);
@@ -511,7 +558,7 @@ export function handlePlaceSettlement(
     }
 
     updateLongestRoadHolder(state);
-    addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed', playerId });
+    addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed', playerId, data: { cost: BUILDING_COSTS[BuildingType.Settlement] } });
   }
 
   // Update VP
@@ -550,8 +597,7 @@ export function handlePlaceRoad(
     if (!allowedPhase && !isFreeRoad) {
       return sendError(playerId, 'Cannot build in this phase');
     }
-    const current = getCurrentPlayer(state);
-    if (current.id !== playerId) return sendError(playerId, 'Not your turn');
+    if (!isActivePlayer(state, playerId)) return sendError(playerId, 'Not your turn');
 
     const error = canPlaceRoad(state, playerId, payload.edge, !!isFreeRoad);
     if (error) return sendError(playerId, error);
@@ -579,7 +625,7 @@ export function handlePlaceRoad(
     player.roadsBuilt += 1;
 
     updateLongestRoadHolder(state);
-    addLogEntry(state, { type: 'place_road', message: isFreeRoad ? 'Road placed (free)' : 'Road placed', playerId });
+    addLogEntry(state, { type: 'place_road', message: isFreeRoad ? 'Road placed (free)' : 'Road placed', playerId, data: isFreeRoad ? undefined : { cost: BUILDING_COSTS[BuildingType.Road] } });
   }
 
   for (const p of state.players) {
@@ -602,8 +648,7 @@ export function handlePlaceCity(
     return sendError(playerId, 'Cannot build in this phase');
   }
 
-  const current = getCurrentPlayer(state);
-  if (current.id !== playerId) return sendError(playerId, 'Not your turn');
+  if (!isActivePlayer(state, playerId)) return sendError(playerId, 'Not your turn');
 
   const error = canPlaceCity(state, playerId, payload.vertex);
   if (error) return sendError(playerId, error);
@@ -617,7 +662,7 @@ export function handlePlaceCity(
   player.citiesBuilt += 1;
   player.settlementsBuilt -= 1; // city replaces settlement
 
-  addLogEntry(state, { type: 'place_city', message: 'City placed', playerId });
+  addLogEntry(state, { type: 'place_city', message: 'City placed', playerId, data: { cost: BUILDING_COSTS[BuildingType.City] } });
 
   for (const p of state.players) {
     p.victoryPoints = calculateVictoryPoints(state, p.id);
@@ -634,7 +679,7 @@ export function handleBuyDevCard(playerId: string, gameId: string): void {
   if (error) return sendError(playerId, error);
 
   const cardType = executeBuyDevCard(state, playerId);
-  addLogEntry(state, { type: 'buy_dev_card', message: 'Bought a development card', playerId });
+  addLogEntry(state, { type: 'buy_dev_card', message: 'Bought a development card', playerId, data: { cost: DEV_CARD_COST } });
 
   // Notify the buyer privately of their card
   hub.send(playerId, 'action_result', { success: true, type: 'buy_dev_card', cardType });
@@ -841,11 +886,10 @@ export function handleDiscardCards(
 
   executeDiscard(player, payload.resources);
   state.pendingDiscards = state.pendingDiscards.filter((id) => id !== playerId);
-  addLogEntry(state, { type: 'discard', message: 'Discarded cards', playerId });
+  addLogEntry(state, { type: 'discard', message: 'Discarded cards', playerId, data: { resources: payload.resources } });
 
   // If all pending discards are done, transition to robber
   if (state.pendingDiscards.length === 0) {
-    clearDiscardTimer(gameId);
     transitionPhase(state, GamePhase.MoveRobber);
   }
 
@@ -1077,6 +1121,7 @@ export function handleTradeWithBank(
     type: 'trade_bank',
     message: `Bank trade: ${payload.givingCount} ${payload.giving} → 1 ${payload.receiving}`,
     playerId,
+    data: { giving: payload.giving, givingCount: payload.givingCount, receiving: payload.receiving },
   });
 
   broadcastAndCheckVictory(gameId, state);
@@ -1110,6 +1155,35 @@ export function handlePassSpecialBuild(playerId: string, gameId: string): void {
 
   broadcastState(gameId, state);
   scheduleBotTurn(gameId);
+}
+
+export function handleRequestSpecialBuild(playerId: string, gameId: string): void {
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+  if (state.players.length < 5) return sendError(playerId, 'Special build requires 5+ players');
+
+  const current = getCurrentPlayer(state);
+  if (current.id === playerId) return sendError(playerId, 'Active player cannot request special build');
+
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || player.status === PlayerStatus.Quit) return sendError(playerId, 'Player not found');
+
+  if (state.specialBuildRequests.includes(playerId)) return; // already requested
+
+  state.specialBuildRequests.push(playerId);
+  addLogEntry(state, { type: 'request_special_build', message: 'Requested special build', playerId });
+  broadcastState(gameId, state);
+}
+
+export function handleCancelSpecialBuild(playerId: string, gameId: string): void {
+  const state = games.get(gameId);
+  if (!state) return sendError(playerId, 'Game not found');
+
+  const idx = state.specialBuildRequests.indexOf(playerId);
+  if (idx === -1) return; // not requested
+
+  state.specialBuildRequests.splice(idx, 1);
+  broadcastState(gameId, state);
 }
 
 // ---------------------------------------------------------------------------
@@ -1194,55 +1268,10 @@ export function handleDevRollSeven(playerId: string, gameId: string): void {
   if (mustDiscard.length > 0) {
     state.pendingDiscards = mustDiscard;
     transitionPhase(state, GamePhase.Discard);
-    scheduleDiscardTimer(gameId);
   } else {
     transitionPhase(state, GamePhase.MoveRobber);
   }
 
-  broadcastAndCheckVictory(gameId, state);
-  scheduleBotTurn(gameId);
-}
-
-// ---------------------------------------------------------------------------
-// Discard auto-timer (10 seconds)
-// ---------------------------------------------------------------------------
-
-const discardTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function scheduleDiscardTimer(gameId: string): void {
-  clearDiscardTimer(gameId);
-  const timer = setTimeout(() => {
-    discardTimers.delete(gameId);
-    autoDiscardRemaining(gameId);
-  }, 15_000);
-  discardTimers.set(gameId, timer);
-}
-
-function clearDiscardTimer(gameId: string): void {
-  const existing = discardTimers.get(gameId);
-  if (existing) {
-    clearTimeout(existing);
-    discardTimers.delete(gameId);
-  }
-}
-
-function autoDiscardRemaining(gameId: string): void {
-  const state = games.get(gameId);
-  if (!state || state.currentPhase !== GamePhase.Discard) return;
-  if (state.pendingDiscards.length === 0) return;
-
-  for (const pid of [...state.pendingDiscards]) {
-    const player = state.players.find((p) => p.id === pid);
-    if (!player) continue;
-    const count = Math.floor(totalCards(player.resources) / 2);
-    autoDiscardRandom(player, count);
-    state.pendingDiscards = state.pendingDiscards.filter((id) => id !== pid);
-    addLogEntry(state, { type: 'discard', message: 'Auto-discarded (time expired)', playerId: pid });
-  }
-
-  if (state.pendingDiscards.length === 0) {
-    transitionPhase(state, GamePhase.MoveRobber);
-  }
   broadcastAndCheckVictory(gameId, state);
   scheduleBotTurn(gameId);
 }
@@ -1403,7 +1432,14 @@ function botRollDice(gameId: string, state: GameState, bot: Player): void {
       transitionPhase(state, GamePhase.MoveRobber);
     }
   } else {
-    const distribution = distributeResources(state, diceSum);
+    const { distribution, blockedResources } = distributeResources(state, diceSum);
+    for (const res of blockedResources) {
+      addLogEntry(state, {
+        type: 'bank_shortage',
+        message: `Bank has no ${res} left — no ${res} distributed`,
+        data: { resource: res },
+      });
+    }
     logDistribution(state, distribution);
     transitionPhase(state, GamePhase.TradeAndBuild);
   }

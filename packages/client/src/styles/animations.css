@@ -27,6 +27,27 @@
   100% { transform: scale(1); }
 }
 
+@keyframes gap-open {
+  from { width: 0; }
+  to { width: 24px; }
+}
+
+@keyframes card-slide-in {
+  from { transform: translateY(-120px); opacity: 0; }
+  20% { opacity: 1; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes card-slide-out {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-120px); opacity: 0; }
+}
+
+@keyframes gap-close {
+  from { width: 52px; margin-left: -28px; overflow: hidden; }
+  to { width: 0px; margin-left: 0px; overflow: hidden; }
+}
+
 .animate-fade-in { animation: fadeIn 0.3s ease-out; }
 .animate-slide-up { animation: slideUp 0.3s ease-out; }
 .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }

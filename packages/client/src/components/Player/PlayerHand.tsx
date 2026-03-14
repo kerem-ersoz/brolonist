@@ -17,8 +17,11 @@ interface PlayerHandProps {
   onPlayDevCard: (cardType: string, params?: Record<string, unknown>) => void;
   onSelectionChange?: (selected: Record<string, number>) => void;
   clearSelection?: number;
+  selectable?: boolean;
   discardMode?: boolean;
   discardMax?: number;
+  incomingCards?: Record<string, number>;
+  outgoingCards?: Record<string, number>;
 }
 
 import { SpriteImage } from '../Sprites/SpriteImage';
@@ -73,6 +76,8 @@ const DEV_CARD_I18N: Record<string, string> = {
   monopoly: 'monopoly',
 };
 
+const DEV_CARD_ORDER = ['victory_point', 'monopoly', 'year_of_plenty', 'road_building', 'knight'] as const;
+
 export function PlayerHand({
   resources,
   developmentCards,
@@ -87,8 +92,11 @@ export function PlayerHand({
   onPlayDevCard,
   onSelectionChange,
   clearSelection,
+  selectable = true,
   discardMode,
   discardMax,
+  incomingCards,
+  outgoingCards,
 }: PlayerHandProps) {
   const { t } = useTranslation();
   const addNotification = useNotificationStore((s) => s.addNotification);
@@ -101,16 +109,23 @@ export function PlayerHand({
     setSelectedForTrade([]);
   }, [clearSelection]);
 
-  // Build individual card list from resource counts
-  const cards: Array<{ resource: string; index: number }> = [];
+  // Build individual card list from resource counts, with placeholders for incoming/outgoing cards
+  const cards: Array<{ resource: string; index: number; isGap?: boolean; isOutgoing?: boolean }> = [];
   for (const r of RESOURCE_ORDER) {
     const count = resources[r] ?? 0;
+    const outgoing = outgoingCards?.[r] ?? 0;
+    // Mark the last N cards of this resource as outgoing
     for (let i = 0; i < count; i++) {
-      cards.push({ resource: r, index: i });
+      const isOut = outgoing > 0 && i >= count - outgoing;
+      cards.push({ resource: r, index: i, isOutgoing: isOut || undefined });
+    }
+    const incoming = incomingCards?.[r] ?? 0;
+    for (let i = 0; i < incoming; i++) {
+      cards.push({ resource: r, index: count + i, isGap: true });
     }
   }
 
-  const totalCards = cards.length;
+  const totalCards = cards.filter(c => !c.isGap && !c.isOutgoing).length;
 
   // Group dev cards by type for stacked display
   const devCardGroups = developmentCards.reduce<Record<string, Array<{ type: string; turnPurchased?: number }>>>((acc, card) => {
@@ -119,27 +134,93 @@ export function PlayerHand({
     return acc;
   }, {});
 
+  // Split cards into left (before gap) and right (after gap) groups
+  const hasGaps = cards.some(c => c.isGap);
+  const gapIndex = hasGaps ? cards.findIndex(c => c.isGap) : -1;
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
+    <div className="fixed bottom-0 left-0 right-0 pointer-events-none" style={{ zIndex: 30 }}>
 
       {/* Hand area — resource cards + dev cards, pinned to bottom-left */}
-      <div className="pointer-events-auto absolute bottom-4 left-6 flex items-end gap-3 z-40">
+      <div className="pointer-events-auto absolute bottom-4 left-6 flex items-end gap-3">
 
         {/* Resource cards — horizontal line with overlap */}
         <div className="flex items-end" style={{ minHeight: 80 }}>
-          <div className="flex">
-            {cards.map((card, i) => {
+          <div className="flex" data-hand-container>
+            {(() => {
+              let passedGap = false;
+              let outgoingIdx = 0;
+              return cards.map((card, i) => {
+              if (card.isGap) {
+                passedGap = true;
+                // Count which gap this is (for sequential delay)
+                const gapsBefore = cards.slice(0, i).filter(c => c.isGap).length;
+                return (
+                  <div
+                    key={`gap-${card.resource}-${card.index}`}
+                    style={{
+                      height: 75,
+                      position: 'relative',
+                      zIndex: 30,
+                      overflow: 'visible',
+                      animation: 'gap-open 300ms ease-out forwards',
+                    }}
+                  >
+                    {/* Animated card sliding down into position */}
+                    <div
+                      className="absolute rounded-lg shadow-lg overflow-hidden"
+                      style={{
+                        width: 52,
+                        height: 75,
+                        left: -14,
+                        animation: `card-slide-in 600ms ease-out ${gapsBefore * 250}ms both`,
+                      }}
+                    >
+                      <img src={RESOURCE_CARD_SPRITES[card.resource]} alt={card.resource} className="w-full h-full object-fill" draggable={false} />
+                    </div>
+                  </div>
+                );
+              }
+              if (card.isOutgoing) {
+                const thisOutIdx = outgoingIdx++;
+                return (
+                  <div
+                    key={`out-${card.resource}-${card.index}`}
+                    style={{
+                      width: 52,
+                      marginLeft: i === 0 ? 0 : -28,
+                      position: 'relative',
+                      zIndex: 30,
+                      overflow: 'visible',
+                      animation: `gap-close 300ms ease-in ${thisOutIdx * 250 + 800}ms forwards`,
+                    }}
+                  >
+                    <div
+                      className="rounded-lg shadow-lg overflow-hidden"
+                      style={{
+                        width: 52,
+                        height: 75,
+                        animation: `card-slide-out 800ms ease-in ${thisOutIdx * 250}ms both`,
+                      }}
+                    >
+                      <img src={RESOURCE_CARD_SPRITES[card.resource]} alt={card.resource} className="w-full h-full object-fill" draggable={false} />
+                    </div>
+                  </div>
+                );
+              }
               const key = `${card.resource}-${card.index}`;
               const selected = selectedForTrade.includes(key);
+              const cardZ = passedGap ? 50 + i : i;
 
               return (
                 <div
                   key={key}
                   className="transition-all duration-200"
-                  style={{ marginLeft: i === 0 ? 0 : -28 }}
+                  style={{ marginLeft: i === 0 ? 0 : -28, position: 'relative', zIndex: cardZ }}
                 >
                   <button
                     onClick={() => {
+                      if (!selectable && !discardMode) return;
                       setSelectedForTrade((prev) => {
                         const isSelected = prev.includes(key);
                         if (!isSelected && discardMode && discardMax != null) {
@@ -159,13 +240,11 @@ export function PlayerHand({
                       });
                       if (!discardMode) onCardClick(card.resource);
                     }}
-                    className="rounded-lg shadow-lg border border-white/20 flex flex-col items-center justify-center select-none cursor-pointer transition-all duration-200 hover:shadow-xl"
+                    className={`rounded-lg shadow-lg border border-white/20 flex flex-col items-center justify-center select-none transition-all duration-200 hover:shadow-xl ${selectable || discardMode ? 'cursor-pointer' : 'cursor-default'}`}
                     style={{
                       width: 52,
                       height: 75,
                       transform: selected ? 'translateY(-14px)' : undefined,
-                      zIndex: i,
-                      position: 'relative',
                     }}
                     onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.transform = 'translateY(-8px)'; }}
                     onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLElement).style.transform = ''; }}
@@ -175,7 +254,8 @@ export function PlayerHand({
                   </button>
                 </div>
               );
-            })}
+            });
+            })()}
 
             {totalCards === 0 && (
               <div className="text-gray-500 text-sm italic pb-4">{t('trade.noResources', 'No resources')}</div>
@@ -183,10 +263,15 @@ export function PlayerHand({
           </div>
         </div>
 
-        {/* Dev cards — to the right of resource cards, stacked by type */}
-        {developmentCards.length > 0 && (
-          <div className="flex items-end gap-1.5 relative">
-            {Object.entries(devCardGroups).map(([type, group]) => {
+      </div>
+
+      {/* Dev cards — fixed position to the left of building buttons */}
+      {developmentCards.length > 0 && (
+        <div className="pointer-events-auto fixed z-40 flex items-end" style={{ bottom: 16, right: 'calc(20rem + 11px + 23.5rem + 30px)' }}>
+          {(() => {
+            const visibleTypes = DEV_CARD_ORDER.filter((type) => devCardGroups[type]);
+            return visibleTypes.map((type, idx) => {
+            const group = devCardGroups[type];
             const style = DEV_CARD_STYLES[type] || DEV_CARD_STYLES.knight;
             const i18nKey = DEV_CARD_I18N[type] || type;
             const isVP = type === 'victory_point';
@@ -195,10 +280,14 @@ export function PlayerHand({
             );
             const canPlay = isMyTurn && !devCardPlayedThisTurn && !isVP && !!playable;
             const count = group.length;
+            const isLast = idx === visibleTypes.length - 1;
+            const visibleWidth = isLast ? 52 : 24;
 
             return (
               <button
                 key={type}
+                onMouseEnter={(e) => { e.currentTarget.style.zIndex = '100'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.zIndex = String(idx); }}
                 onClick={() => {
                   if (!canPlay) {
                     if (isVP) return;
@@ -214,30 +303,37 @@ export function PlayerHand({
                     onPlayDevCard(type);
                   }
                 }}
-                disabled={!canPlay}
-                className={`relative rounded-lg border ${canPlay ? 'border-white/30 cursor-pointer hover:-translate-y-2 hover:shadow-xl' : 'border-white/10 opacity-60 cursor-default'} flex flex-col items-center justify-center shadow-lg select-none transition-transform duration-150`}
-                style={{ width: 48, height: 76 }}
+                className={`overflow-visible hover:-translate-y-2 ${canPlay ? 'cursor-pointer' : 'cursor-default'} select-none transition-transform duration-150`}
+                style={{ width: visibleWidth, height: 75, position: 'relative', zIndex: idx }}
                 title={`${t(`devCards.${i18nKey}`)}${count > 1 ? ` (×${count})` : ''}${isVP ? ' (auto-scored)' : canPlay ? ' — click to play' : !isMyTurn ? ' — not your turn' : devCardPlayedThisTurn ? ' — already played one this turn' : ' — bought this turn'}`}
               >
-                <SpriteImage 
-                  src={style.sprite} 
-                  fallback={<span className="text-lg leading-none">{style.fallback}</span>}
-                  alt={style.label} 
-                  className="w-full h-full object-fill pointer-events-none" 
-                />
-                {count > 1 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-white text-gray-900 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">
-                    {count}
-                  </span>
-                )}
+                <div
+                  className={`absolute top-0 left-0 rounded-lg border shadow-lg ${canPlay ? 'border-white/30' : 'border-white/10'} pointer-events-none`}
+                  style={{ width: 52, height: 75 }}
+                >
+                  <SpriteImage 
+                    src={style.sprite} 
+                    fallback={<span className="text-lg leading-none">{style.fallback}</span>}
+                    alt={style.label} 
+                    className="w-full h-full object-fill rounded-lg" 
+                  />
+                  {count > 1 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-white text-gray-900 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">
+                      {count}
+                    </span>
+                  )}
+                </div>
               </button>
             );
-          })}
+          });
+          })()}
+        </div>
+      )}
 
-          {/* Resource picker popover for Year of Plenty / Monopoly */}
-          {pendingCard && (
-            <div className="absolute bottom-full mb-2 left-0 bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-3 z-60 pointer-events-auto">
-              <div className="text-white text-xs font-semibold mb-2 text-center">
+      {/* Resource picker popover for Year of Plenty / Monopoly — outside dev cards to avoid z-index conflicts */}
+      {pendingCard && (
+        <div className="fixed pointer-events-auto bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-3" style={{ zIndex: 200, bottom: 100, right: 'calc(20rem + 11px + 23.5rem + 30px)' }}>
+          <div className="text-white text-xs font-semibold mb-2 text-center">
                 {pendingCard === 'year_of_plenty'
                   ? `${t('devCards.yearOfPlenty')}: Pick 2 resources`
                   : `${t('devCards.monopoly')}: Pick 1 resource`}
@@ -313,10 +409,7 @@ export function PlayerHand({
               </button>
             </div>
           )}
-        </div>
-      )}
 
-      </div>
     </div>
   );
 }

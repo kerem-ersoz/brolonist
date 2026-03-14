@@ -49,6 +49,9 @@ interface GameStateView {
   largestArmyHolder: string | null;
   deckSize?: number;
   freeRoadsRemaining?: number;
+  specialBuildOrder?: string[];
+  specialBuildCurrentIndex?: number;
+  specialBuildRequests?: string[];
   log: Array<{ timestamp: string; playerId?: string; type: string; message: string; data?: Record<string, unknown> }>;
   config?: { turnTimerSeconds?: number; victoryPoints?: number; [key: string]: unknown };
   turnDeadline?: string | null;
@@ -112,6 +115,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isMyTurn: () => {
     const { gameState, myPlayerId } = get();
     if (!gameState || !myPlayerId) return false;
+    // During special build, the active player is from specialBuildOrder
+    if (gameState.currentPhase === 'special_build' && gameState.specialBuildOrder?.length) {
+      return gameState.specialBuildOrder[gameState.specialBuildCurrentIndex ?? 0] === myPlayerId;
+    }
     return gameState.players[gameState.currentPlayerIndex]?.id === myPlayerId;
   },
 

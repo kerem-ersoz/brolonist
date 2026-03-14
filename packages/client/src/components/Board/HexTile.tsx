@@ -116,7 +116,7 @@ export function HexTile({ q, r, terrain, numberToken, size, hasRobber, onClick, 
           {glowing && (
             <circle
               cx={center.x} cy={center.y} r={size * 0.5}
-              fill="#4488ff" opacity={0.4}
+              fill="#ff3333" opacity={0.55}
               className="animate-pulse"
             />
           )}

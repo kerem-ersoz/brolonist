@@ -90,27 +90,35 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
                 {p.name.charAt(0).toUpperCase()}
               </div>
 
-              {/* Name & badges */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-white text-xs font-semibold truncate">
-                    {p.name}
-                    {isMe && <span className="text-gray-400 ml-1">(you)</span>}
-                  </span>
+              {/* Name (top) + stats (bottom) */}
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span className="text-white text-xs font-semibold truncate leading-tight">
+                  {p.name}
+                  {isMe && <span className="text-gray-400 ml-1">(you)</span>}
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="flex items-center gap-0.5" title={p.hasLargestArmy ? 'Largest Army' : 'Knights played'}>
+                    <SpriteImage src={DEV_CARD_SPRITES.knight} fallback={<span className="text-[12px] leading-none">⚔️</span>} className="w-3 h-3 object-contain" />
+                    <span className={`text-[10px] font-medium ${p.hasLargestArmy ? 'text-yellow-400' : 'text-gray-300'}`}>{p.knightsPlayed}</span>
+                  </div>
+                  <div className="flex items-center gap-0.5" title={p.hasLongestRoad ? 'Longest Road' : 'Longest road'}>
+                    <SpriteImage src={ICONS.road} fallback={<span className="text-[12px] leading-none">🛣️</span>} className="w-3 h-3 object-contain" />
+                    <span className={`text-[10px] font-medium ${p.hasLongestRoad ? 'text-yellow-400' : 'text-gray-300'}`}>{p.longestRoadLength ?? 0}</span>
+                  </div>
                 </div>
               </div>
 
               {/* Card counts + VP */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <div className="relative" title="Resource cards">
-                  <SpriteImage src={ICONS.cardResource} fallback={<span className="text-[12px]">🎴</span>} className="w-5 h-7 object-fill rounded-sm" />
-                  <span className="absolute -top-1.5 -right-2 bg-gray-900 text-white text-[9px] font-bold min-w-[14px] h-[14px] rounded-full flex items-center justify-center border border-gray-600 px-0.5">
+                  <SpriteImage src={ICONS.cardResource} fallback={<span className="text-[16px]">🎴</span>} className="object-fill rounded-sm" style={{ width: 26, height: 37 }} />
+                  <span className="absolute -top-1.5 -right-2 bg-gray-900 text-white text-[11px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center border border-gray-600 px-0.5">
                     {totalCards}
                   </span>
                 </div>
                 <div className="relative" title="Development cards">
-                  <SpriteImage src={ICONS.cardDev} fallback={<span className="text-[12px]">🃏</span>} className="w-5 h-7 object-fill rounded-sm" />
-                  <span className="absolute -top-1.5 -right-2 bg-gray-900 text-white text-[9px] font-bold min-w-[14px] h-[14px] rounded-full flex items-center justify-center border border-gray-600 px-0.5">
+                  <SpriteImage src={ICONS.cardDev} fallback={<span className="text-[16px]">🃏</span>} className="object-fill rounded-sm" style={{ width: 26, height: 37 }} />
+                  <span className="absolute -top-1.5 -right-2 bg-gray-900 text-white text-[11px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center border border-gray-600 px-0.5">
                     {devCards}
                   </span>
                 </div>
@@ -120,47 +128,6 @@ export function SidebarPlayerList({ players, currentPlayerId, myPlayerId }: Side
                 </div>
               </div>
             </div>
-
-            {/* Stats row */}
-            <div className="flex items-center gap-2 mt-1.5 pl-10">
-              {/* Knights */}
-              <div className="flex items-center gap-0.5" title="Knights played">
-                <SpriteImage src={DEV_CARD_SPRITES.knight} fallback={<span className="text-[12px] leading-none">⚔️</span>} className="w-3 h-3 object-contain" />
-                <span className="text-[10px] text-gray-300 font-medium">{p.knightsPlayed}</span>
-              </div>
-
-              {/* Longest road length */}
-              <div className="flex items-center gap-0.5" title="Longest road">
-                <SpriteImage src={ICONS.road} fallback={<span className="text-[12px] leading-none">🛣️</span>} className="w-3 h-3 object-contain" />
-                <span className="text-[10px] text-gray-300 font-medium">{p.longestRoadLength ?? 0}</span>
-              </div>
-
-              {/* Pieces remaining */}
-              <div className="flex items-center gap-0.5 ml-auto" title="Roads remaining">
-                <SpriteImage src={ICONS.road} fallback={<span className="text-[12px] leading-none">🛣️</span>} className="w-3 h-3 object-contain" />
-                <span className="text-[10px] text-gray-300">{15 - p.roadsBuilt}</span>
-              </div>
-              <div className="flex items-center gap-0.5" title="Settlements remaining">
-                <SpriteImage src={ICONS.settlement} fallback={<span className="text-[12px] leading-none">🏠</span>} className="w-3 h-3 object-contain" />
-                <span className="text-[10px] text-gray-300">{5 - p.settlementsBuilt}</span>
-              </div>
-              <div className="flex items-center gap-0.5" title="Cities remaining">
-                <SpriteImage src={ICONS.city} fallback={<span className="text-[12px] leading-none">🏙️</span>} className="w-3 h-3 object-contain" />
-                <span className="text-[10px] text-gray-300">{4 - p.citiesBuilt}</span>
-              </div>
-            </div>
-
-            {/* Achievement badges */}
-            {(p.hasLongestRoad || p.hasLargestArmy) && (
-              <div className="flex gap-1 mt-1 pl-10">
-                {p.hasLongestRoad && (
-                  <span className="text-[10px] bg-yellow-900/40 text-yellow-400 rounded px-1">🛣️ Longest</span>
-                )}
-                {p.hasLargestArmy && (
-                  <span className="text-[10px] bg-yellow-900/40 text-yellow-400 rounded px-1">⚔️ Largest</span>
-                )}
-              </div>
-            )}
           </div>
         );
       })}

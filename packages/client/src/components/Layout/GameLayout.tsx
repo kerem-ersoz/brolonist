@@ -13,11 +13,11 @@ interface GameLayoutProps {
 
 export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton, phaseHint, isMyTurn }: GameLayoutProps) {
   return (
-    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0 h-full">
       {/* Main area */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         {/* Phase hint — floating pill, absolutely positioned over the board */}
-        <div className="absolute top-1.5 left-0 right-0 flex justify-center pointer-events-none z-20">
+        <div className="absolute left-0 right-0 flex justify-center pointer-events-none z-20" style={{ top: 44 }}>
           {phaseHint ? (
             <div className={`px-5 py-2 rounded-full text-white text-sm font-semibold shadow-lg backdrop-blur-sm ${
               isMyTurn ? 'bg-yellow-600/80 animate-pulse' : 'bg-gray-700/70'
@@ -48,7 +48,7 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
 
       {/* Right sidebar — absolutely positioned to span full height */}
       {rightPanel && (
-        <div className="hidden lg:flex lg:flex-col lg:w-80 py-2 px-2 gap-2 border-l border-gray-700/50 absolute top-0 right-0 bottom-0 z-50 backdrop-blur-sm" style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}>
+        <div className="hidden lg:flex lg:flex-col lg:w-80 py-2 px-2 gap-2 border-l border-gray-700/50 absolute right-0 bottom-0 z-40 backdrop-blur-sm" style={{ backgroundColor: 'rgba(0,0,0,0.35)', top: 40 }}>
           {rightPanel}
         </div>
       )}

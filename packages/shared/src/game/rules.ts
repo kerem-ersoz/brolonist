@@ -43,12 +43,18 @@ export function isConnectedToRoad(board: Board, vertex: VertexId, playerId: stri
   return false;
 }
 
-/** Check if an edge is connected to the player's network (road/settlement/city). */
+/** Check if an edge is connected to the player's network (road/settlement/city).
+ *  An opponent's building on a vertex blocks road connections through that vertex.
+ */
 export function isEdgeConnectedToNetwork(board: Board, edge: EdgeId, playerId: string): boolean {
   const endpoints = edgeAdjacentVertices(edge);
   for (const v of endpoints) {
     const vBuilding = board.vertexBuildings.get(vertexKey(v));
+    // Player's own building at this vertex = connected
     if (vBuilding && vBuilding.playerId === playerId) return true;
+    // Opponent's building at this vertex = blocks connection through it
+    if (vBuilding && vBuilding.playerId !== playerId) continue;
+    // No building: check for player's roads through this vertex
     const adjEdges = vertexAdjacentEdges(v);
     for (const adjEdge of adjEdges) {
       if (edgeEquals(adjEdge, edge)) continue;

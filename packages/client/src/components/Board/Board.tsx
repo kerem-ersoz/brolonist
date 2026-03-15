@@ -158,10 +158,11 @@ export function Board({
     >
     <svg
       viewBox={viewBox}
-      className="w-full h-full"
+      className="w-full h-full select-none"
       preserveAspectRatio="xMidYMid meet"
-      style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' }}
+      style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center', userSelect: 'none', WebkitUserSelect: 'none' }}
       onClick={(e) => { if (e.target === e.currentTarget && onBackgroundClick) onBackgroundClick(); }}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <defs>
         <filter id="building-shadow" x="-50%" y="-50%" width="200%" height="200%">

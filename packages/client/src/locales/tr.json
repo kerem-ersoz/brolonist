@@ -7,11 +7,12 @@
     "phase": { "placeRoad": "Yolunuzu yerleştirin", "placeSettlement": "Yerleşiminizi yerleştirin", "freeRoads": "{{count}} ücretsiz yol yerleştirin (Yol Yapımı)", "moveRobber": "Hırsızı yeni bir alana taşıyın", "discard": "Kartlarınızın yarısını verin", "rollDice": "Zar atın!", "specialBuild": "Özel İnşaat — inşa et veya geç", "specialBuildWait": "Özel İnşaat devam ediyor...", "waiting": "{{name}} bekleniyor..." },
     "stealFrom": "Çal",
     "discard": "Kart At",
-    "discardConfirm": "Onayla"
+    "discardConfirm": "Onayla",
+    "leave": "Oyundan Ayrıl"
   },
   "buildings": { "road": "Yol", "settlement": "Yerleşim", "city": "Şehir" },
   "resources": { "brick": "Tuğla", "lumber": "Kereste", "ore": "Maden", "grain": "Tahıl", "wool": "Yün" },
-  "trade": { "offer": "Teklif", "give": "Ver", "want": "İste", "propose": "Teklif Et", "accept": "Kabul Et", "decline": "Reddet", "counter": "Karşı Teklif", "bankTrade": "Banka Ticareti", "noOffers": "Aktif teklif yok", "offers": "teklif ediyor", "noResources": "Kaynak yok" },
+  "trade": { "offer": "Teklif", "give": "Ver", "want": "Al", "propose": "Teklif Et", "accept": "Kabul Et", "decline": "Reddet", "counter": "Karşı Teklif", "bankTrade": "Banka Ticareti", "noOffers": "Aktif teklif yok", "offers": "teklif ediyor", "noResources": "Kaynak yok" },
   "devCards": { "knight": "Şövalye", "victoryPoint": "Zafer Puanı", "roadBuilding": "Yol Yapımı", "yearOfPlenty": "Bolluk Yılı", "monopoly": "Tekel" },
   "map": { "standard": "Standart", "archipelago": "Takımadalar", "world": "Dünya", "diamond": "Elmas", "britishIsles": "İngiltere ve İrlanda", "gear": "Vites", "lakes": "Göller", "custom": "Özel", "custom_tileCount": "Karo Sayısı", "custom_shape": "Harita Şekli", "custom_round": "Yuvarlak", "custom_elongated": "Uzun", "custom_star": "Yıldız", "custom_random": "Rastgele", "custom_seed": "Harita Tohumu", "custom_seedPlaceholder": "Tekrarlanabilir haritalar için tohum girin", "custom_tileRatios": "Karo Oranları", "custom_ratioResource": "Kaynak", "custom_ratioDesert": "Çöl", "custom_ratioWater": "Su", "custom_randomize": "Rastgele Oluştur" },
   "status": { "connected": "Bağlandı", "reconnecting": "Yeniden bağlanıyor...", "disconnected": "Bağlantı kesildi" },
@@ -32,7 +33,14 @@
     "devCardAlreadyPlayed": "Bu turda zaten bir gelişim kartı oynandı",
     "devCardBoughtThisTurn": "Satın aldığınız turda gelişim kartı oynanamaz",
     "cannotBuildInPhase": "Şu anda inşa edemezsiniz",
-    "noCardsToSteal": "Komşu oyuncuların çalınacak kartı yok"
+    "noCardsToSteal": "Komşu oyuncuların çalınacak kartı yok",
+    "tooClose": "Başka bir binaya çok yakın",
+    "insufficientResources": "Yetersiz kaynak",
+    "cannotBuildOnWater": "Su üzerine inşa edilemez",
+    "notConnectedRoad": "Yolunuza bağlı değil",
+    "notConnectedNetwork": "Ağınıza bağlı değil",
+    "vertexOccupied": "Bu nokta zaten dolu",
+    "edgeOccupied": "Bu kenar zaten dolu"
   },
   "player": { "you": "(sen)", "resourceCards": "Kaynak kartları", "developmentCards": "Gelişim kartları", "vp": "ZP", "knightsPlayed": "Oynanan şövalyeler", "largestArmy": "En Büyük Ordu", "longestRoad": "En Uzun Yol", "largest": "(En Büyük)", "longest": "(En Uzun)" },
   "log": {
@@ -69,6 +77,8 @@
     "trade_bank": "banka ticareti: {{giving}} → {{receiving}}",
     "pass_special_build": "özel inşaat geçti",
     "request_special_build": "özel inşaat talep etti",
+    "longest_road": "{{player}} En Uzun Yol'u aldı!",
+    "largest_army": "{{player}} En Büyük Ordu'yu aldı!",
     "player_joined": "oyuna katıldı",
     "player_left": "oyundan ayrıldı"
   }

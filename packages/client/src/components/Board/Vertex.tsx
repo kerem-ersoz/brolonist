@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { vertexToPixel, type VertexDirection } from '@brolonist/shared';
 import { assetPath } from '../../utils/sprites';
 
@@ -25,12 +25,30 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
   const r = size * 0.18;
   const hitR = size * 0.2;
   const [hovered, setHovered] = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const prevBuildingRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = building ? `${building.type}-${building.playerId}` : null;
+    if (key && key !== prevBuildingRef.current) {
+      setAnimating(true);
+      const timer = setTimeout(() => setAnimating(false), 500);
+      prevBuildingRef.current = key;
+      return () => clearTimeout(timer);
+    }
+    prevBuildingRef.current = key;
+  }, [building]);
+
+  const dropBounceStyle = animating ? {
+    animation: 'building-drop-bounce 500ms ease-out',
+    transformOrigin: `${pos.x}px ${pos.y}px`,
+  } : undefined;
 
   if (building) {
     const color = PLAYER_COLORS[building.color] || '#999';
     if (building.type === 'city') {
       return (
-        <g pointerEvents="none" filter="url(#building-shadow)">
+        <g pointerEvents="none" filter="url(#building-shadow)" style={dropBounceStyle}>
           <image
             href={assetPath(`assets/sprites/city-${building.color}.png`)}
             x={pos.x - r * 3.7}
@@ -54,7 +72,7 @@ export function Vertex({ hex, direction, size, building, validPlacement, ghost, 
     }
     // Existing settlement — clickable for city upgrade during build phase
     return (
-      <g className={onClick ? 'cursor-pointer' : undefined} onClick={onClick} pointerEvents={onClick ? undefined : 'none'} filter="url(#building-shadow)">
+      <g className={onClick ? 'cursor-pointer' : undefined} onClick={onClick} pointerEvents={onClick ? undefined : 'none'} filter="url(#building-shadow)" style={dropBounceStyle}>
         {onClick && <circle cx={pos.x} cy={pos.y} r={hitR} fill="transparent" />}
         <image href={assetPath(`assets/sprites/settlement-${building.color}.png`)} x={pos.x - r * 3.885} y={pos.y - r * 3.885} width={r * 7.77} height={r * 7.77} pointerEvents="none" />
       </g>

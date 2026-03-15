@@ -39,7 +39,7 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
         )}
 
         {/* Trade offers — top-right of the map area, scrollable column */}
-        <div className="pointer-events-none" style={{ position: 'absolute', top: 48, right: 'calc(20rem + 8px)', bottom: 130, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 8, width: 288, overflowY: 'auto' }}>
+        <div className="pointer-events-none" style={{ position: 'absolute', top: 48, right: 'calc(20rem + 8px)', bottom: 100, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 8, width: 230, overflowY: 'auto' }}>
           <div className="pointer-events-auto">
             {tradeOffers}
           </div>

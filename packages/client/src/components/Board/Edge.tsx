@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { vertexToPixel, edgeAdjacentVertices, type EdgeDirection } from '@brolonist/shared';
 import { assetPath } from '../../utils/sprites';
 
@@ -26,6 +26,19 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, ho
   const p2 = vertexToPixel(v2, size);
   const hitWidth = size * 0.3;
   const [hovered, setHovered] = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const prevBuildingRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = building ? `${building.type}-${building.playerId}` : null;
+    if (key && key !== prevBuildingRef.current) {
+      setAnimating(true);
+      const timer = setTimeout(() => setAnimating(false), 500);
+      prevBuildingRef.current = key;
+      return () => clearTimeout(timer);
+    }
+    prevBuildingRef.current = key;
+  }, [building]);
 
   if (building) {
     const color = PLAYER_COLORS[building.color] || '#999';
@@ -37,8 +50,13 @@ export function Edge({ hex, direction, size, building, validPlacement, ghost, ho
     const length = Math.sqrt(dx * dx + dy * dy);
     const displayLength = length * 0.9;
 
+    const dropBounceStyle = animating ? {
+      animation: 'building-drop-bounce 500ms ease-out',
+      transformOrigin: `${mx}px ${my}px`,
+    } : undefined;
+
     return (
-      <g pointerEvents="none" filter="url(#road-glow)">
+      <g pointerEvents="none" filter="url(#road-glow)" style={dropBounceStyle}>
         <image
           href={assetPath(`assets/sprites/road-${building.color}.png`)}
           x={mx - displayLength / 2}

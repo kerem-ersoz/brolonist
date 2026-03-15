@@ -27,6 +27,15 @@
   100% { transform: scale(1); }
 }
 
+@keyframes building-drop-bounce {
+  0% { transform: translateY(-50px) scale(1); opacity: 0; }
+  30% { opacity: 1; }
+  50% { transform: translateY(0) scale(1.2); }
+  70% { transform: translateY(-5px) scale(1); }
+  85% { transform: translateY(0) scale(1.05); }
+  100% { transform: translateY(0) scale(1); }
+}
+
 @keyframes gap-open {
   from { width: 0; }
   to { width: 24px; }

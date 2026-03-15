@@ -84,27 +84,9 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
   const secondsLeft = useCountdown(offer.expiresAt);
 
   return (
-    <div style={{ flexShrink: 0 }} className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl p-4 w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-white font-bold text-sm">{t('trade.yourOffer', 'Your Trade Offer')}</h3>
-        <div className="flex items-center gap-2">
-          {secondsLeft > 0 && (
-            <span className={`text-xs font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-              {secondsLeft}s
-            </span>
-          )}
-          <button
-            onClick={() => onCancel(offer.id)}
-            className="text-gray-400 hover:text-white text-lg leading-none"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
+    <div style={{ flexShrink: 0 }} className="bg-gray-800 border border-gray-600 rounded-xl shadow-2xl px-3 py-2 w-full">
       {/* Offer summary with card sprites */}
-      <div className="flex items-center gap-2 mb-3 text-xs">
+      <div className="flex items-center gap-2 mb-2 text-xs">
         <span className="text-green-300 font-semibold">{t('trade.give')}:</span>
         <ResourceCards resources={offer.offering} />
         <span className="text-gray-500 mx-1">→</span>
@@ -113,10 +95,22 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
           ? <span className="text-yellow-300">❓</span>
           : <ResourceCards resources={offer.requesting} />}
         {offer.openToOffers && Object.values(offer.requesting).some(v => v > 0) && <span className="text-yellow-300">+ ❓</span>}
+        <span className="flex-1" />
+        {secondsLeft > 0 && (
+          <span className={`text-xs font-bold ${secondsLeft <= 5 ? 'text-red-400' : 'text-gray-400'}`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+            {secondsLeft}s
+          </span>
+        )}
+        <button
+          onClick={() => onCancel(offer.id)}
+          className="text-gray-400 hover:text-white text-lg leading-none"
+        >
+          ✕
+        </button>
       </div>
 
       {/* Player avatars with response status */}
-      <div className="flex gap-3 justify-center flex-wrap mb-3">
+      <div className="flex gap-2 justify-center flex-wrap">
         {opponents.map((player) => {
           const response = offer.responses[player.id];
           const counter = offer.counterOffers[player.id];
@@ -125,74 +119,49 @@ export function TradeInitiatorPanel({ offer, opponents, onConfirm, onCancel }: T
           const declined = response === 'decline';
           const countered = response === 'counter';
           const waiting = !response;
+          const clickable = accepted || countered;
 
           return (
-            <div key={player.id} className="flex flex-col items-center gap-1 min-w-[72px]">
-              {/* Avatar */}
+            <div key={player.id} className="flex flex-col items-center gap-0.5">
+              {/* Avatar with overlay status */}
               <div
-                className={`w-10 h-10 rounded-full border-3 flex items-center justify-center transition-all ${
+                className={`relative w-[30px] h-[30px] rounded-full flex items-center justify-center transition-all ${
                   accepted
-                    ? 'ring-2 ring-green-400 ring-offset-2 ring-offset-gray-800'
-                    : declined
-                      ? 'opacity-40'
-                      : ''
+                    ? 'ring-2 ring-green-400 ring-offset-1 ring-offset-gray-800 cursor-pointer hover:brightness-125'
+                    : countered
+                      ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-gray-800 cursor-pointer hover:brightness-125'
+                      : declined
+                        ? 'opacity-30'
+                        : ''
                 }`}
-                style={{ backgroundColor: playerColor, borderColor: playerColor }}
+                style={{ backgroundColor: playerColor }}
+                onClick={clickable ? () => onConfirm(offer.id, player.id) : undefined}
+                title={accepted ? 'Click to confirm trade' : countered ? 'Click to accept counter-offer' : undefined}
               >
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white/90">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-white/90">
                   <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
                 </svg>
+                {/* Status overlay */}
+                {declined && (
+                  <span className="absolute inset-0 flex items-center justify-center text-[10px] bg-black/40 rounded-full">❌</span>
+                )}
+                {accepted && (
+                  <span className="absolute inset-0 flex items-center justify-center text-[10px] bg-black/30 rounded-full">✓</span>
+                )}
+                {countered && (
+                  <span className="absolute inset-0 flex items-center justify-center text-[10px] bg-black/30 rounded-full">🔄</span>
+                )}
               </div>
-
-              {/* Name */}
-              <span className={`text-[10px] font-medium truncate max-w-[72px] text-center ${declined ? 'text-gray-600' : 'text-gray-300'}`}>
-                {player.name}
-              </span>
-
-              {/* Status indicator */}
-              {waiting && (
-                <span className="text-[10px] text-gray-500 animate-pulse">⏳</span>
-              )}
-              {declined && (
-                <span className="text-[10px] text-red-400">❌</span>
-              )}
+              {/* Counter-offer resources shown below */}
               {countered && counter && (
-                <div className="flex flex-col items-center gap-1">
-                  <div className="flex items-center gap-0.5">
-                    <span className="text-yellow-400 text-[10px]">🔄</span>
-                    <ResourceCards resources={counter.offering} />
-                  </div>
-                  <button
-                    onClick={() => onConfirm(offer.id, player.id)}
-                    className="w-7 h-7 rounded-full text-sm font-bold bg-yellow-600 hover:bg-yellow-500 text-white transition-colors flex items-center justify-center"
-                    title="Accept counter-offer"
-                  >
-                    ✓
-                  </button>
+                <div className="flex items-center gap-0.5">
+                  <ResourceCards resources={counter.offering} />
                 </div>
-              )}
-
-              {/* Confirm button for accepted players */}
-              {accepted && (
-                <button
-                  onClick={() => onConfirm(offer.id, player.id)}
-                  className="w-7 h-7 rounded-full text-sm font-bold bg-green-600 hover:bg-green-500 text-white transition-colors flex items-center justify-center"
-                >
-                  ✓
-                </button>
               )}
             </div>
           );
         })}
       </div>
-
-      {/* Cancel button */}
-      <button
-        onClick={() => onCancel(offer.id)}
-        className="w-full py-1.5 rounded-lg text-xs font-semibold bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
-      >
-        {t('game.cancel')}
-      </button>
     </div>
   );
 }

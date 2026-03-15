@@ -7,7 +7,8 @@
     "phase": { "placeRoad": "Place your road", "placeSettlement": "Place your settlement", "freeRoads": "Place {{count}} free road(s) (Road Building)", "moveRobber": "Move the robber to a new hex", "discard": "Discard half your cards", "rollDice": "Roll the dice!", "specialBuild": "Special Build Phase — build or pass", "specialBuildWait": "Special Build Phase in progress...", "waiting": "Waiting for {{name}}..." },
     "stealFrom": "Steal from",
     "discard": "Discard",
-    "discardConfirm": "Confirm"
+    "discardConfirm": "Confirm",
+    "leave": "Leave Game"
   },
   "buildings": { "road": "Road", "settlement": "Settlement", "city": "City" },
   "resources": { "brick": "Brick", "lumber": "Lumber", "ore": "Ore", "grain": "Grain", "wool": "Wool" },
@@ -32,7 +33,14 @@
     "devCardAlreadyPlayed": "Already played a dev card this turn",
     "devCardBoughtThisTurn": "Can't play a dev card on the turn you bought it",
     "cannotBuildInPhase": "You can't build right now",
-    "noCardsToSteal": "No adjacent players have any cards to steal"
+    "noCardsToSteal": "No adjacent players have any cards to steal",
+    "tooClose": "Too close to another building",
+    "insufficientResources": "Insufficient resources",
+    "cannotBuildOnWater": "Cannot build on water",
+    "notConnectedRoad": "Not connected to your road",
+    "notConnectedNetwork": "Not connected to your network",
+    "vertexOccupied": "This spot is already occupied",
+    "edgeOccupied": "This edge is already occupied"
   },
   "player": { "you": "(you)", "resourceCards": "Resource cards", "developmentCards": "Development cards", "vp": "VP", "knightsPlayed": "Knights played", "largestArmy": "Largest Army", "longestRoad": "Longest Road", "largest": "(Largest)", "longest": "(Longest)" },
   "log": {
@@ -69,6 +77,8 @@
     "trade_bank": "bank trade: {{giving}} → {{receiving}}",
     "pass_special_build": "passed special build",
     "request_special_build": "requested special build",
+    "longest_road": "{{player}} claimed Longest Road!",
+    "largest_army": "{{player}} claimed Largest Army!",
     "player_joined": "joined the game",
     "player_left": "left the game"
   }

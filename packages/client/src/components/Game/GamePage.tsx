@@ -83,12 +83,23 @@ function GamePageInner() {
   const addNotification = useNotificationStore((s) => s.addNotification);
 
   // Show server errors as notification pills
+  const SERVER_ERROR_KEYS: Record<string, string> = {
+    'Too close to another building': 'errors.tooClose',
+    'Not your turn': 'errors.notYourTurn',
+    'Insufficient resources': 'errors.insufficientResources',
+    'Cannot build on water': 'errors.cannotBuildOnWater',
+    'Not connected to your road': 'errors.notConnectedRoad',
+    'Not connected to your network': 'errors.notConnectedNetwork',
+    'Vertex is occupied': 'errors.vertexOccupied',
+    'Edge is occupied': 'errors.edgeOccupied',
+  };
   useEffect(() => {
     if (lastError) {
-      addNotification(lastError, 'error');
+      const i18nKey = SERVER_ERROR_KEYS[lastError];
+      addNotification(i18nKey ? t(i18nKey) : lastError, 'error');
       useGameStore.getState().setError(null);
     }
-  }, [lastError, addNotification]);
+  }, [lastError, addNotification, t]);
 
   const [tradeModalOpen, setTradeModalOpen] = useState(false);
   const [tradePreselect, setTradePreselect] = useState<string | null>(null);
@@ -129,14 +140,15 @@ function GamePageInner() {
 
   // --- Resource distribution & trade animations ---
   const [animationItems, setAnimationItems] = useState<ResourceAnimationItem[]>([]);
-  const prevLogLengthRef = useRef(0);
+  const prevLogLengthRef = useRef(-1);
 
   useLayoutEffect(() => {
     if (!gameState || !myPlayerId) return;
     const logLen = gameState.log.length;
     const prevLen = prevLogLengthRef.current;
     prevLogLengthRef.current = logLen;
-    if (prevLen === 0 || logLen <= prevLen) return;
+    // First sync: just record the current length without processing
+    if (prevLen < 0 || logLen <= prevLen) return;
 
     const newEntries = gameState.log.slice(prevLen);
     const newItems: ResourceAnimationItem[] = [];
@@ -274,9 +286,8 @@ function GamePageInner() {
       if (entry.type === 'roll_dice') {
         sounds.diceRoll();
       }
-      // Build placement sound (for my placements)
-      if ((entry.type === 'place_settlement' || entry.type === 'place_road' || entry.type === 'place_city')
-          && entry.playerId === myPlayerId) {
+      // Build placement sound (any player including bots)
+      if (entry.type === 'place_settlement' || entry.type === 'place_road' || entry.type === 'place_city') {
         sounds.build();
       }
       // Chat message from other player
@@ -403,8 +414,16 @@ function GamePageInner() {
     // Don't play if game just ended (gameEnd sound takes priority)
     if ((longestChanged || largestChanged) && phase !== 'game_over') {
       sounds.longest();
+      if (longestChanged && gameState) {
+        const holder = gameState.players.find(p => p.id === longestHolder);
+        if (holder) addNotification(t('log.longest_road', { player: holder.name }));
+      }
+      if (largestChanged && gameState) {
+        const holder = gameState.players.find(p => p.id === largestHolder);
+        if (holder) addNotification(t('log.largest_army', { player: holder.name }));
+      }
     }
-  }, [longestHolder, largestHolder, phase]);
+  }, [longestHolder, largestHolder, phase, gameState, addNotification, t]);
   const discardCount = useMemo(() => {
     if (!mustDiscard || !gameState || !myPlayerId) return 0;
     const player = gameState.players.find(p => p.id === myPlayerId);

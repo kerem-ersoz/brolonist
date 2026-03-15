@@ -197,6 +197,7 @@ function broadcastAndCheckVictory(gameId: string, state: GameState): void {
 
 const ROLL_TIMER_SECONDS = 5;
 const ROBBER_TIMER_SECONDS = 30;
+const STEAL_PICK_TIMER_SECONDS = 10;
 const SPECIAL_BUILD_TIMER_SECONDS = 25;
 const DISCARD_TIMER_SECONDS = 15;
 
@@ -269,9 +270,9 @@ function resetTurnTimer(gameId: string, state: GameState): void {
         const player = s.players.find(p => p.id === pid);
         if (!player) continue;
         const count = Math.floor(totalCards(player.resources) / 2);
-        autoDiscardRandom(player, count);
+        const discarded = autoDiscardRandom(player, count);
         s.pendingDiscards = s.pendingDiscards.filter(id => id !== pid);
-        addLogEntry(s, { type: 'discard', message: 'Auto-discarded (time expired)', playerId: pid });
+        addLogEntry(s, { type: 'discard', message: 'Auto-discarded (time expired)', playerId: pid, data: { resources: discarded } });
       }
       if (s.pendingDiscards.length === 0) {
         transitionPhase(s, GamePhase.MoveRobber);
@@ -803,7 +804,8 @@ export function handleMoveRobber(
   if (error) return sendError(playerId, error);
 
   executeRobberMove(state, payload.hex);
-  addLogEntry(state, { type: 'move_robber', message: 'Robber moved', playerId });
+  const robberHex = state.board.hexes.find(h => h.coord.q === payload.hex.q && h.coord.r === payload.hex.r);
+  addLogEntry(state, { type: 'move_robber', message: 'Robber moved', playerId, data: { hex: payload.hex, numberToken: robberHex?.numberToken ?? null, terrain: robberHex?.terrain ?? null } });
 
   // Get steal targets (other players with buildings adjacent to the new robber hex who have cards)
   const targets = getStealTargets(state, payload.hex);
@@ -826,8 +828,20 @@ export function handleMoveRobber(
     }
     finishRobberPhase(gameId, state);
   } else {
-    // Multiple targets — player must choose
+    // Multiple targets — player must choose within 10s
     state.pendingStealTargets = targets;
+
+    // Set a 10s timer for steal target selection
+    const deadline = new Date(Date.now() + STEAL_PICK_TIMER_SECONDS * 1000).toISOString();
+    state.turnDeadline = deadline;
+    startTurnTimer(gameId, STEAL_PICK_TIMER_SECONDS * 1000, () => {
+      const s = games.get(gameId);
+      if (!s || !s.pendingStealTargets || s.pendingStealTargets.length === 0) return;
+      const current = getCurrentPlayer(s);
+      const victimId = s.pendingStealTargets[Math.floor(Math.random() * s.pendingStealTargets.length)];
+      handleStealFrom(current.id, gameId, { victimId });
+    });
+
     broadcastState(gameId, state);
     scheduleBotTurn(gameId);
     return; // Stay in MoveRobber phase until steal_from is received
@@ -944,7 +958,7 @@ export function handleTradeOffer(
   // Human-readable log entry
   const fmtRes = (r: Resources) => Object.entries(r).filter(([,v]) => v > 0).map(([k,v]) => `${v} ${k}`).join(', ');
   const requestStr = isOpen && Object.values(offer.requesting).every(v => v === 0) ? '(open to offers)' : fmtRes(offer.requesting);
-  addLogEntry(state, { type: 'trade_offer', message: `offers ${fmtRes(offer.offering)} for ${requestStr}`, playerId });
+  addLogEntry(state, { type: 'trade_offer', message: `offers ${fmtRes(offer.offering)} for ${requestStr}`, playerId, data: { offering: offer.offering, requesting: offer.requesting } });
 
   hub.broadcast(gameId, 'trade_proposed', { offer });
   broadcastState(gameId, state);
@@ -1325,9 +1339,9 @@ export function processBotTurn(gameId: string): void {
         const bot = state.players.find((p) => p.id === botId);
         if (!bot) continue;
         const discardCount = Math.floor(totalCards(bot.resources) / 2);
-        autoDiscardRandom(bot, discardCount);
+        const discarded = autoDiscardRandom(bot, discardCount);
         state.pendingDiscards = state.pendingDiscards.filter((id) => id !== botId);
-        addLogEntry(state, { type: 'discard', message: 'Discarded cards (bot)', playerId: botId });
+        addLogEntry(state, { type: 'discard', message: 'Discarded cards (bot)', playerId: botId, data: { resources: discarded } });
       }
       if (state.pendingDiscards.length === 0) {
         transitionPhase(state, GamePhase.MoveRobber);
@@ -1387,11 +1401,20 @@ function botSetupTurn(gameId: string, state: GameState, bot: Player): void {
   const sError = handleSetupSettlement(state, bot.id, settlement);
   if (sError) return;
 
-  if (state.currentPhase === GamePhase.SetupReverse) {
-    distributeInitialResources(state, bot.id, settlement);
-  }
   state.setupAction = 'road';
-  addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup, bot)', playerId: bot.id });
+  if (state.currentPhase === GamePhase.SetupReverse) {
+    const initialResources = distributeInitialResources(state, bot.id, settlement);
+    addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup, bot)', playerId: bot.id });
+    if (initialResources) {
+      const parts: string[] = [];
+      for (const [res, count] of Object.entries(initialResources)) {
+        if (count > 0) parts.push(`${count} ${res}`);
+      }
+      addLogEntry(state, { type: 'distribute', message: `received ${parts.join(', ')}`, playerId: bot.id, data: { resources: initialResources } });
+    }
+  } else {
+    addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup, bot)', playerId: bot.id });
+  }
 
   // Place a road adjacent to the settlement just placed
   const adjEdges = vertexAdjacentEdges(settlement);
@@ -1484,7 +1507,8 @@ function botMoveRobber(gameId: string, state: GameState, bot: Player): void {
 
   const targetHex = validHexes[Math.floor(Math.random() * validHexes.length)].coord;
   executeRobberMove(state, targetHex);
-  addLogEntry(state, { type: 'move_robber', message: 'Robber moved (bot)', playerId: bot.id });
+  const botRobberHex = state.board.hexes.find(h => h.coord.q === targetHex.q && h.coord.r === targetHex.r);
+  addLogEntry(state, { type: 'move_robber', message: 'Robber moved (bot)', playerId: bot.id, data: { hex: targetHex, numberToken: botRobberHex?.numberToken ?? null, terrain: botRobberHex?.terrain ?? null } });
 
   // Steal from a random adjacent player
   const targets = getStealTargets(state, targetHex);

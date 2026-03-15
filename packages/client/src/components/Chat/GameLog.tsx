@@ -15,6 +15,7 @@ interface GameLogProps {
   playerNames: Record<string, { name: string; color: string }>;
   myPlayerId?: string | null;
   onSendChat?: (message: string) => void;
+  extraButton?: React.ReactNode;
 }
 
 const COLOR_MAP: Record<string, string> = {
@@ -55,6 +56,10 @@ const TOKEN_TO_RESOURCE: Record<string, string> = {
   ':ore:': 'ore', ':grain:': 'grain', ':wheat:': 'grain',
   ':wool:': 'wool', ':sheep:': 'wool',
   ':resource:': '_resource_back',
+};
+
+const TERRAIN_TO_RESOURCE: Record<string, string> = {
+  hills: 'brick', forest: 'lumber', mountains: 'ore', fields: 'grain', pasture: 'wool',
 };
 
 function formatResourceStr(resources?: Record<string, number>): string {
@@ -134,11 +139,21 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
     case 'end_turn':
       return t('log.end_turn');
     case 'buy_dev_card':
-      return 'bought :devcard:';
+      return t('log.buy_dev_card');
     case 'play_dev_card':
       return t('log.play_dev_card', { card: entry.message.replace('Played ', '') });
-    case 'move_robber':
+    case 'move_robber': {
+      const number = data.numberToken as number | null;
+      const terrain = data.terrain as string | undefined;
+      const resToken = terrain ? (RESOURCE_TOKEN[TERRAIN_TO_RESOURCE[terrain] || ''] || '') : '';
+      if (number && resToken) {
+        return t('log.move_robber_detail', { number: String(number), resource: resToken });
+      }
+      if (number) {
+        return t('log.move_robber_number', { number: String(number) });
+      }
       return t('log.move_robber');
+    }
     case 'robber_blocked': {
       const resource = data.resource as string || '';
       const num = data.number as number || 0;
@@ -161,8 +176,10 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
       }
       return t('log.steal', { victim });
     }
-    case 'discard':
-      return t('log.discard');
+    case 'discard': {
+      const discardedRes = formatResourceStr(data.resources as Record<string, number>);
+      return discardedRes ? t('log.discard_detail', { resources: discardedRes }) : t('log.discard');
+    }
     case 'trade_offer': {
       const offering = formatResourceStr(data.offering as Record<string, number>);
       const requesting = formatResourceStr(data.requesting as Record<string, number>);
@@ -176,16 +193,32 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
       return t('log.trade_decline');
     case 'trade_counter':
       return t('log.trade_counter');
-    case 'trade_completed':
-      return t('log.trade_completed');
+    case 'trade_completed': {
+      const fromId = data.fromPlayerId as string;
+      const toId = data.toPlayerId as string;
+      const fromName = playerNames[fromId]?.name || '?';
+      const toName = playerNames[toId]?.name || '?';
+      const gave = formatResourceStr(data.offering as Record<string, number>);
+      const got = formatResourceStr(data.requesting as Record<string, number>);
+      return t('log.trade_done', { from: fromName, to: toName, gave: gave || '?', got: got || '?' });
+    }
     case 'trade_cancel':
       return t('log.trade_cancel');
     case 'trade_expired':
       return t('log.trade_expired');
-    case 'trade_bank':
-      return t('log.trade_bank', { giving: '', receiving: '' });
+    case 'trade_bank': {
+      const giving = data.giving as string || '';
+      const givingCount = data.givingCount as number || 0;
+      const receiving = data.receiving as string || '';
+      const givingToken = RESOURCE_TOKEN[giving] || giving;
+      const receivingToken = RESOURCE_TOKEN[receiving] || receiving;
+      const giveStr = Array(givingCount).fill(givingToken).join('');
+      return t('log.trade_bank', { giving: giveStr, receiving: receivingToken });
+    }
     case 'pass_special_build':
       return t('log.pass_special_build');
+    case 'request_special_build':
+      return t('log.request_special_build');
     case 'trade_proposed':
       return entry.message; // client-side, already formatted
     default:
@@ -193,7 +226,63 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
   }
 }
 
-export function GameLog({ entries, playerNames, myPlayerId, onSendChat }: GameLogProps) {
+/** Renders text with :resource:/:dice-N: tokens as sprites AND player names as colored bold text */
+function renderWithSpritesAndNames(text: string, playerNames: Record<string, { name: string; color: string }>): ReactNode {
+  // Build a regex that matches sprite tokens OR player names (longest first to avoid partial matches)
+  const names = Object.values(playerNames).map(p => p.name).filter(Boolean);
+  names.sort((a, b) => b.length - a.length); // longest first
+  const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+  const spritePattern = ':(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource|dice-[1-6]|devcard):';
+  const namePattern = escapedNames.length > 0 ? escapedNames.join('|') : null;
+  const fullPattern = namePattern ? `(?:${spritePattern})|(?:${namePattern})` : spritePattern;
+  const regex = new RegExp(fullPattern, 'g');
+
+  // Build a name→color lookup
+  const nameColorMap: Record<string, string> = {};
+  for (const p of Object.values(playerNames)) {
+    if (p.name) nameColorMap[p.name] = COLOR_MAP[p.color] || 'text-gray-300';
+  }
+
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const matched = match[0];
+    // Check if it's a sprite token
+    if (matched.startsWith(':') && matched.endsWith(':')) {
+      const diceSprite = DICE_SPRITES[matched];
+      const otherSprite = OTHER_SPRITES[matched];
+      if (diceSprite) {
+        parts.push(<img key={key++} src={diceSprite} alt={matched} className="inline-block w-5 h-5 object-contain align-text-bottom mx-px" />);
+      } else if (otherSprite) {
+        parts.push(<img key={key++} src={otherSprite} alt={matched} className="inline-block w-4 h-5 object-fill align-text-bottom mx-px rounded-sm" />);
+      } else {
+        const res = TOKEN_TO_RESOURCE[matched];
+        if (res && RESOURCE_SPRITES[res]) {
+          parts.push(<img key={key++} src={RESOURCE_SPRITES[res]} alt={`:${res}:`} className="inline-block w-4 h-5 object-fill align-text-bottom mx-px rounded-sm" />);
+        } else {
+          parts.push(matched);
+        }
+      }
+    } else {
+      // It's a player name
+      const colorClass = nameColorMap[matched] || 'text-gray-300';
+      parts.push(<span key={key++} className={`font-semibold ${colorClass}`}>{matched}</span>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>;
+}
+
+export function GameLog({ entries, playerNames, myPlayerId, onSendChat, extraButton }: GameLogProps) {
   const { t } = useTranslation();
   const endRef = useRef<HTMLDivElement>(null);
   const [chatInput, setChatInput] = useState('');
@@ -221,14 +310,21 @@ export function GameLog({ entries, playerNames, myPlayerId, onSendChat }: GameLo
         )}
         {entries.map((entry, i) => {
           if (entry.type === 'end_turn') return null;
+          if (entry.type === 'trade_decline') return null;
+          if (entry.type === 'trade_accept') return null;
+          if (entry.type === 'trade_offer') return null;
+          if (entry.type === 'trade_cancel') return null;
+          if (entry.type === 'trade_expired') return null;
+          if (entry.type === 'trade_proposed') return null;
+          if (entry.type === 'pass_special_build') return null;
           const player = entry.playerId ? playerNames[entry.playerId] : null;
           const colorClass = player ? (COLOR_MAP[player.color] || 'text-gray-300') : 'text-gray-500';
           const isChat = entry.type === 'chat';
           const localizedMsg = useLocalizedMessage(entry, playerNames, t, myPlayerId);
           return (
             <div key={i} className={`leading-tight ${isChat ? 'pl-1 border-l-2 border-blue-500/40' : ''}`}>
-              {player && <span className={`font-semibold ${colorClass}`}>{player.name}: </span>}
-              <span className="text-gray-300">{renderWithSprites(localizedMsg)}</span>
+              {player && <span className={`font-semibold ${colorClass}`}>{player.name}{isChat ? ':' : ''} </span>}
+              <span className="text-gray-300">{renderWithSpritesAndNames(localizedMsg, playerNames)}</span>
             </div>
           );
         })}
@@ -256,6 +352,7 @@ export function GameLog({ entries, playerNames, myPlayerId, onSendChat }: GameLo
           >
             ➤
           </button>
+          {extraButton}
         </div>
       )}
     </div>

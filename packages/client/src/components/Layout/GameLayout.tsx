@@ -33,13 +33,13 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
         {/* Dice + End turn — stacked vertically, bottom-right, above everything */}
         {(dice || endTurnButton) && (
           <div className="absolute bottom-px z-40 flex flex-col items-end gap-2 pointer-events-auto" style={{ right: 'calc(20rem + 11px)' }}>
-            <div style={{ marginRight: -15 }}>{dice}</div>
+            {dice}
             {endTurnButton}
           </div>
         )}
 
         {/* Trade offers — top-right of the map area, scrollable column */}
-        <div className="pointer-events-none" style={{ position: 'absolute', top: 8, right: 'calc(20rem + 8px)', bottom: 130, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 8, width: 288, overflowY: 'auto' }}>
+        <div className="pointer-events-none" style={{ position: 'absolute', top: 48, right: 'calc(20rem + 8px)', bottom: 130, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 8, width: 288, overflowY: 'auto' }}>
           <div className="pointer-events-auto">
             {tradeOffers}
           </div>

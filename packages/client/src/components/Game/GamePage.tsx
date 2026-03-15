@@ -939,25 +939,11 @@ function GamePageInner() {
         }
         dice={
           <div className="flex items-center gap-2">
-            {is5PlusGame && (
-              <button
-                onClick={canToggleSpecialBuild ? handleToggleSpecialBuild : undefined}
-                disabled={!canToggleSpecialBuild}
-                className={`pointer-events-auto px-2 py-0.5 rounded text-xs font-medium transition-all ${
-                  hasRequestedSpecialBuild
-                    ? 'bg-amber-600 text-white'
-                    : canToggleSpecialBuild
-                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      : 'bg-gray-800 text-gray-500 cursor-default'
-                }`}
-                title={hasRequestedSpecialBuild ? 'Cancel Special Build Request' : 'Request Special Build'}
-              >
-                🏗️ {hasRequestedSpecialBuild ? 'SB ✓' : 'SB'}
-              </button>
-            )}
             {canRoll
               ? <DiceDisplay dice={null} canRoll onRoll={handleRollDice} />
-              : gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null
+              : isSetup
+                ? <DiceDisplay dice={[1, 1]} disabled />
+                : gameState.dice[0] > 0 ? <DiceDisplay dice={gameState.dice} /> : null
             }
           </div>
         }
@@ -1034,6 +1020,23 @@ function GamePageInner() {
                 playerNames={playerNames}
                 myPlayerId={myPlayerId}
                 onSendChat={(message) => sendMessage('chat', { message })}
+                extraButton={is5PlusGame ? (
+                  <button
+                    onClick={canToggleSpecialBuild ? handleToggleSpecialBuild : undefined}
+                    disabled={!canToggleSpecialBuild}
+                    className={`px-2 py-1.5 text-sm rounded transition-all ${
+                      hasRequestedSpecialBuild
+                        ? 'bg-red-600'
+                        : canToggleSpecialBuild
+                          ? 'hover:bg-gray-700 cursor-pointer'
+                          : 'opacity-30 cursor-default'
+                    }`}
+                    style={{ backgroundColor: hasRequestedSpecialBuild ? undefined : 'rgba(0,0,0,0.3)' }}
+                    title={hasRequestedSpecialBuild ? 'Cancel Special Build Request' : 'Request Special Build'}
+                  >
+                    🚩
+                  </button>
+                ) : undefined}
               />
             }
             deckSize={(gameState as unknown as Record<string, unknown>).deckSize as number ?? 0}

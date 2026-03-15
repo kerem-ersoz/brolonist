@@ -8,10 +8,11 @@ interface GameLayoutProps {
   dice?: ReactNode;
   endTurnButton?: ReactNode;
   phaseHint?: string;
+  announcement?: string;
   isMyTurn?: boolean;
 }
 
-export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton, phaseHint, isMyTurn }: GameLayoutProps) {
+export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton, phaseHint, announcement, isMyTurn }: GameLayoutProps) {
   return (
     <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0 h-full" onContextMenu={(e) => e.preventDefault()}>
       {/* Main area */}
@@ -25,6 +26,11 @@ export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, e
               {phaseHint}
             </div>
           ) : null}
+          {announcement && (
+            <div className="px-5 py-2 rounded-full text-white text-sm font-semibold shadow-lg backdrop-blur-sm bg-amber-600/90 animate-slide-up mt-2">
+              {announcement}
+            </div>
+          )}
         </div>
 
         {/* Board — fills all available space */}

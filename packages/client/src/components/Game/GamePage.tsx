@@ -93,6 +93,8 @@ function GamePageInner() {
     'Vertex is occupied': 'errors.vertexOccupied',
     'Edge is occupied': 'errors.edgeOccupied',
   };
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+  const announcementTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (lastError) {
       const i18nKey = SERVER_ERROR_KEYS[lastError];
@@ -155,7 +157,7 @@ function GamePageInner() {
 
     // Distribution animations
     for (const entry of newEntries) {
-      if (entry.type === 'distribute' && entry.data?.resources && entry.playerId) {
+      if ((entry.type === 'distribute' || entry.type === 'year_of_plenty') && entry.data?.resources && entry.playerId) {
         newItems.push({
           kind: 'distribute',
           id: `${entry.timestamp}-${entry.playerId}`,
@@ -306,9 +308,22 @@ function GamePageInner() {
       if (entry.type === 'monopoly') {
         sounds.monopoly();
       }
-      // Robber moved
-      if (entry.type === 'move_robber') {
-        sounds.robber();
+      // Robber moved — only play sound if I have a building adjacent to the target hex
+      if (entry.type === 'move_robber' && entry.data?.hex && gameState && myPlayerId) {
+        const rh = entry.data.hex as { q: number; r: number };
+        const vb = gameState.board.vertexBuildings;
+        const buildings = vb instanceof Map ? vb : new Map(Object.entries(vb || {}));
+        let adjacent = false;
+        for (const [key, building] of buildings) {
+          if ((building as { playerId: string }).playerId !== myPlayerId) continue;
+          const parts = key.split(',');
+          const vq = parseInt(parts[0], 10), vr = parseInt(parts[1], 10), dir = parts[2];
+          const adjHexes = dir === 'N'
+            ? [{ q: vq, r: vr }, { q: vq, r: vr - 1 }, { q: vq + 1, r: vr - 1 }]
+            : [{ q: vq, r: vr }, { q: vq, r: vr + 1 }, { q: vq - 1, r: vr + 1 }];
+          if (adjHexes.some(h => h.q === rh.q && h.r === rh.r)) { adjacent = true; break; }
+        }
+        if (adjacent) sounds.robber();
       }
     }
 
@@ -414,16 +429,22 @@ function GamePageInner() {
     // Don't play if game just ended (gameEnd sound takes priority)
     if ((longestChanged || largestChanged) && phase !== 'game_over') {
       sounds.longest();
+      const msgs: string[] = [];
       if (longestChanged && gameState) {
         const holder = gameState.players.find(p => p.id === longestHolder);
-        if (holder) addNotification(t('log.longest_road', { player: holder.name }));
+        if (holder) msgs.push(t('log.longest_road', { player: holder.name }));
       }
       if (largestChanged && gameState) {
         const holder = gameState.players.find(p => p.id === largestHolder);
-        if (holder) addNotification(t('log.largest_army', { player: holder.name }));
+        if (holder) msgs.push(t('log.largest_army', { player: holder.name }));
+      }
+      if (msgs.length > 0) {
+        setAnnouncement(msgs.join(' · '));
+        if (announcementTimer.current) clearTimeout(announcementTimer.current);
+        announcementTimer.current = setTimeout(() => setAnnouncement(null), 4000);
       }
     }
-  }, [longestHolder, largestHolder, phase, gameState, addNotification, t]);
+  }, [longestHolder, largestHolder, phase, gameState, t]);
   const discardCount = useMemo(() => {
     if (!mustDiscard || !gameState || !myPlayerId) return 0;
     const player = gameState.players.find(p => p.id === myPlayerId);
@@ -641,6 +662,9 @@ function GamePageInner() {
 
   // Sound: clock ticking when 5 seconds left on turn timer (my turn only)
   useEffect(() => {
+    // Stop any currently playing clock tick when deadline changes
+    sounds.stopClockTick();
+
     if (!myTurn || !gameState) return;
     const deadline = (gameState as unknown as Record<string, unknown>).turnDeadline as string | null;
     if (!deadline) return;
@@ -649,11 +673,11 @@ function GamePageInner() {
     const triggerAt = remaining - 5000;
     if (triggerAt <= 0 && remaining > 0) {
       sounds.clockTick();
-      return;
+      return () => sounds.stopClockTick();
     }
     if (triggerAt > 0) {
       const timer = setTimeout(() => sounds.clockTick(), triggerAt);
-      return () => clearTimeout(timer);
+      return () => { clearTimeout(timer); sounds.stopClockTick(); };
     }
   }, [(gameState as unknown as Record<string, unknown>)?.turnDeadline, myTurn]);
 
@@ -1020,6 +1044,7 @@ function GamePageInner() {
 
       <GameLayout
         phaseHint={phaseHint}
+        announcement={announcement ?? undefined}
         isMyTurn={myTurn}
         board={
           <Board

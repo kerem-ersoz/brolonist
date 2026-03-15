@@ -89,12 +89,36 @@ import { filterStateForPlayer, registerFreeRoadsGetter } from './sync.js';
 const games = new Map<string, GameState>();
 
 // Track the phase before a dev card was played so we can return to it.
-// Key: gameId, Value: the phase (e.g. RollDice) that should be restored after the card resolves.
 const preDevCardPhase = new Map<string, string>();
 
 // Track free road placements from Road Building dev card.
-// Key: gameId, Value: { playerId, remaining, phaseBefore }
 const freeRoadsRemaining = new Map<string, { playerId: string; remaining: number; phaseBefore: string }>();
+
+/** Update longest road holder and emit a log entry if it changes. */
+function updateLongestRoadAndLog(state: GameState): void {
+  const prevHolder = state.longestRoadHolder;
+  updateLongestRoadHolder(state);
+  if (state.longestRoadHolder && state.longestRoadHolder !== prevHolder) {
+    addLogEntry(state, {
+      type: 'longest_road',
+      message: 'Got Longest Road',
+      playerId: state.longestRoadHolder,
+    });
+  }
+}
+
+/** Update largest army holder and emit a log entry if it changes. */
+function updateLargestArmyAndLog(state: GameState): void {
+  const prevHolder = state.largestArmyHolder;
+  updateLargestArmyHolder(state);
+  if (state.largestArmyHolder && state.largestArmyHolder !== prevHolder) {
+    addLogEntry(state, {
+      type: 'largest_army',
+      message: 'Got Largest Army',
+      playerId: state.largestArmyHolder,
+    });
+  }
+}
 
 // Register getter so sync.ts can include freeRoadsRemaining in filtered state
 registerFreeRoadsGetter((gameId: string) => {
@@ -198,6 +222,7 @@ function broadcastAndCheckVictory(gameId: string, state: GameState): void {
 const ROLL_TIMER_SECONDS = 5;
 const ROBBER_TIMER_SECONDS = 30;
 const STEAL_PICK_TIMER_SECONDS = 10;
+const ROAD_BUILDING_TIMER_SECONDS = 30;
 const SPECIAL_BUILD_TIMER_SECONDS = 25;
 const DISCARD_TIMER_SECONDS = 15;
 
@@ -217,14 +242,55 @@ function resetTurnTimer(gameId: string, state: GameState): void {
     return;
   }
 
-  // Roll phase always gets a fixed 5-second timer
+  // Roll phase: check if Road Building is active (free roads pending)
   if (state.currentPhase === GamePhase.RollDice) {
+    const freeRoadInfo = freeRoadsRemaining.get(gameId);
+    if (freeRoadInfo && freeRoadInfo.remaining > 0) {
+      // Road Building timer: 30s to place free roads
+      const deadline = new Date(Date.now() + ROAD_BUILDING_TIMER_SECONDS * 1000).toISOString();
+      state.turnDeadline = deadline;
+
+      startTurnTimer(gameId, ROAD_BUILDING_TIMER_SECONDS * 1000, () => {
+        const s = games.get(gameId);
+        if (!s) return;
+        const info = freeRoadsRemaining.get(gameId);
+        if (!info || info.remaining <= 0) return;
+        const current = getCurrentPlayer(s);
+        // Auto-place remaining free roads randomly
+        while (info.remaining > 0) {
+          const validRoads = getValidRoadLocations(s, info.playerId, true);
+          if (validRoads.length === 0) break;
+          const target = validRoads[Math.floor(Math.random() * validRoads.length)];
+          s.board.edgeBuildings.set(edgeKey(target), { type: BuildingType.Road, playerId: info.playerId });
+          const player = s.players.find(p => p.id === info.playerId);
+          if (player) player.roadsBuilt += 1;
+          info.remaining -= 1;
+          addLogEntry(s, { type: 'place_road', message: 'Road placed (free, auto)', playerId: info.playerId });
+        }
+        updateLongestRoadAndLog(s);
+        freeRoadsRemaining.delete(gameId);
+        // Restore to RollDice phase for the actual dice roll
+        if (info.phaseBefore === GamePhase.RollDice) {
+          s.currentPhase = GamePhase.RollDice;
+        }
+        for (const p of s.players) {
+          p.victoryPoints = calculateVictoryPoints(s, p.id);
+        }
+        broadcastAndCheckVictory(gameId, s);
+        scheduleBotTurn(gameId);
+      });
+      return;
+    }
+
+    // Normal roll timer: 5 seconds
     const deadline = new Date(Date.now() + ROLL_TIMER_SECONDS * 1000).toISOString();
     state.turnDeadline = deadline;
 
     startTurnTimer(gameId, ROLL_TIMER_SECONDS * 1000, () => {
       const s = games.get(gameId);
       if (!s || s.currentPhase !== GamePhase.RollDice) return;
+      // Don't auto-roll if free roads are now pending (Road Building was just played)
+      if (freeRoadsRemaining.has(gameId)) return;
       const current = getCurrentPlayer(s);
       handleRollDice(current.id, gameId);
     });
@@ -568,7 +634,7 @@ export function handlePlaceSettlement(
       }
     }
 
-    updateLongestRoadHolder(state);
+    updateLongestRoadAndLog(state);
     addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed', playerId, data: { cost: BUILDING_COSTS[BuildingType.Settlement] } });
   }
 
@@ -635,7 +701,7 @@ export function handlePlaceRoad(
     });
     player.roadsBuilt += 1;
 
-    updateLongestRoadHolder(state);
+    updateLongestRoadAndLog(state);
     addLogEntry(state, { type: 'place_road', message: isFreeRoad ? 'Road placed (free)' : 'Road placed', playerId, data: isFreeRoad ? undefined : { cost: BUILDING_COSTS[BuildingType.Road] } });
   }
 
@@ -719,8 +785,8 @@ export function handlePlayDevCard(
   switch (payload.cardType) {
     case DevelopmentCardType.Knight: {
       executePlayKnight(state, playerId); // sets phase to MoveRobber
-      updateLargestArmyHolder(state);
-      addLogEntry(state, { type: 'play_dev_card', message: 'Played Knight', playerId });
+      updateLargestArmyAndLog(state);
+      addLogEntry(state, { type: 'play_dev_card', message: 'Played Knight', playerId, data: { cardType: 'knight' } });
       // If played before rolling, remember so robber resolution returns to RollDice
       if (phaseBefore === GamePhase.RollDice) {
         preDevCardPhase.set(gameId, phaseBefore);
@@ -733,9 +799,12 @@ export function handlePlayDevCard(
         type: 'play_dev_card',
         message: `Played Road Building (${freeRoads} roads)`,
         playerId,
+        data: { cardType: 'road_building' },
       });
       // Track free road placements
       freeRoadsRemaining.set(gameId, { playerId, remaining: freeRoads, phaseBefore });
+      // Force timer reset to switch from roll timer to road building timer
+      resetTurnTimer(gameId, state);
       break;
     }
     case DevelopmentCardType.YearOfPlenty: {
@@ -743,12 +812,11 @@ export function handlePlayDevCard(
       const resource2 = payload.params?.resource2 as ResourceType;
       if (!resource1 || !resource2) return sendError(playerId, 'Must specify two resources');
       executeYearOfPlenty(state, playerId, resource1, resource2);
-      // Log as distribute so the animation fires (cards from bank to hand)
       const yopResources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
       yopResources[resource1] = (yopResources[resource1] || 0) + 1;
       yopResources[resource2] = (yopResources[resource2] || 0) + 1;
       addLogEntry(state, {
-        type: 'distribute',
+        type: 'year_of_plenty',
         message: `Year of Plenty: received ${resource1}, ${resource2}`,
         playerId,
         data: { resources: yopResources },
@@ -1572,7 +1640,7 @@ function botTradeAndBuild(gameId: string, state: GameState, bot: Player): void {
           bot.harbors.push(harbor.type);
         }
       }
-      updateLongestRoadHolder(state);
+      updateLongestRoadAndLog(state);
       addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (bot)', playerId: bot.id });
       built = true;
     }
@@ -1586,7 +1654,7 @@ function botTradeAndBuild(gameId: string, state: GameState, bot: Player): void {
       bot.resources = subtractResources(bot.resources, BUILDING_COSTS[BuildingType.Road]);
       state.board.edgeBuildings.set(edgeKey(edge), { type: BuildingType.Road, playerId: bot.id });
       bot.roadsBuilt += 1;
-      updateLongestRoadHolder(state);
+      updateLongestRoadAndLog(state);
       addLogEntry(state, { type: 'place_road', message: 'Road placed (bot)', playerId: bot.id });
       built = true;
     }

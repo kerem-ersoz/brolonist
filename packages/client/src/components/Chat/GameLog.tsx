@@ -44,6 +44,9 @@ const DICE_SPRITES: Record<string, string> = {
 
 const OTHER_SPRITES: Record<string, string> = {
   ':devcard:': assetPath('assets/sprites/dev-card-back.png'),
+  ':road:': assetPath('assets/sprites/road-white.png'),
+  ':settlement:': assetPath('assets/sprites/settlement-white.png'),
+  ':city:': assetPath('assets/sprites/city-white.png'),
 };
 
 const RESOURCE_TOKEN: Record<string, string> = {
@@ -76,7 +79,7 @@ function formatResourceStr(resources?: Record<string, number>): string {
 
 /** Renders text with :resource: and :dice-N: tokens replaced by inline sprite images */
 function renderWithSprites(text: string): ReactNode {
-  const pattern = /:(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource|dice-[1-6]|devcard):/g;
+  const pattern = /:(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource|dice-[1-6]|devcard|road|settlement|city):/g;
   const parts: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -140,8 +143,28 @@ function useLocalizedMessage(entry: LogEntry, playerNames: Record<string, { name
       return t('log.end_turn');
     case 'buy_dev_card':
       return t('log.buy_dev_card');
-    case 'play_dev_card':
+    case 'play_dev_card': {
+      const cardType = data.cardType as string;
+      if (cardType === 'knight') return t('log.play_knight');
+      if (cardType === 'road_building') return t('log.play_road_building');
       return t('log.play_dev_card', { card: entry.message.replace('Played ', '') });
+    }
+    case 'longest_road':
+      return t('log.longest_road');
+    case 'largest_army':
+      return t('log.largest_army');
+    case 'monopoly': {
+      const resType = data.resourceType as string || '';
+      const total = data.total as number || 0;
+      const token = RESOURCE_TOKEN[resType] || resType;
+      const tokens = Array(total).fill(token).join('');
+      return t('log.monopoly', { resources: tokens });
+    }
+    case 'year_of_plenty': {
+      const res = data.resources as Record<string, number> | undefined;
+      const tokens = res ? formatResourceStr(res) : '';
+      return t('log.year_of_plenty', { resources: tokens });
+    }
     case 'move_robber': {
       const number = data.numberToken as number | null;
       const terrain = data.terrain as string | undefined;
@@ -233,7 +256,7 @@ function renderWithSpritesAndNames(text: string, playerNames: Record<string, { n
   names.sort((a, b) => b.length - a.length); // longest first
   const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
-  const spritePattern = ':(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource|dice-[1-6]|devcard):';
+  const spritePattern = ':(brick|lumber|wood|ore|grain|wheat|wool|sheep|resource|dice-[1-6]|devcard|road|settlement|city):';
   const namePattern = escapedNames.length > 0 ? escapedNames.join('|') : null;
   const fullPattern = namePattern ? `(?:${spritePattern})|(?:${namePattern})` : spritePattern;
   const regex = new RegExp(fullPattern, 'g');

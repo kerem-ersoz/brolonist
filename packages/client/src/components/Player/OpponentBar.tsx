@@ -19,6 +19,7 @@ interface OpponentBarProps {
 const COLORS: Record<string, string> = {
   red: 'bg-red-600', blue: 'bg-blue-600', white: 'bg-gray-200 text-black', orange: 'bg-orange-500',
   green: 'bg-green-600', brown: 'bg-amber-800', purple: 'bg-purple-600', teal: 'bg-teal-600',
+  pink: 'bg-pink-500', black: 'bg-gray-900',
 };
 
 export function OpponentBar({ opponents, currentPlayerId }: OpponentBarProps) {

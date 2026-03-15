@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CustomMapConfigurator } from './CustomMapConfigurator';
 
 // Miniature hex grid preview for map thumbnails
 const HEX_SIZE = 6;
@@ -27,21 +28,12 @@ function ring2(): Array<{ q: number; r: number }> {
 // Map-specific hex layouts (simplified for preview)
 const MAP_HEXES: Record<string, Array<{ q: number; r: number }>> = {
   standard: ring2(),
-  random: ring2(),
-  pangaea: ring2(),
-  rich_coast: ring2(),
-  desert_ring: ring2(),
   archipelago: [
     { q: -2, r: 0 }, { q: -2, r: 1 }, { q: -1, r: -1 },
     { q: 0, r: -2 }, { q: 1, r: -2 }, { q: 2, r: -2 },
     { q: 2, r: -1 }, { q: 2, r: 0 }, { q: 1, r: 1 },
     { q: 0, r: 2 }, { q: -1, r: 2 }, { q: -2, r: 2 },
     { q: 0, r: 0 }, { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: 0 }, { q: 0, r: 1 },
-  ],
-  turkey: [
-    { q: -3, r: 1 }, { q: -2, r: 0 }, { q: -2, r: 1 }, { q: -1, r: -1 }, { q: -1, r: 0 }, { q: -1, r: 1 },
-    { q: 0, r: -1 }, { q: 0, r: 0 }, { q: 0, r: 1 }, { q: 1, r: -2 }, { q: 1, r: -1 }, { q: 1, r: 0 },
-    { q: 2, r: -2 }, { q: 2, r: -1 }, { q: 3, r: -3 }, { q: 3, r: -2 },
   ],
   world: [
     ...ring2(),
@@ -66,9 +58,10 @@ const MAP_HEXES: Record<string, Array<{ q: number; r: number }>> = {
     { q: 0, r: -3 }, { q: 3, r: -3 }, { q: 3, r: 0 }, { q: 0, r: 3 }, { q: -3, r: 3 }, { q: -3, r: 0 },
   ],
   lakes: ring2(),
+  custom: ring2(), // fallback preview for custom maps
 };
 
-const ALL_MAP_TYPES = ['standard','random','pangaea','archipelago','rich_coast','desert_ring','turkey','world','diamond','british_isles','gear','lakes'] as const;
+const ALL_MAP_TYPES = ['standard','archipelago','world','diamond','british_isles','gear','lakes','custom'] as const;
 
 function MapPreview({ mapType, size = 48 }: { mapType: string; size?: number }): ReactNode {
   const hexes = MAP_HEXES[mapType] || MAP_HEXES.standard;
@@ -157,6 +150,7 @@ export interface GameWaitingRoomProps {
       victoryPoints: number;
       mapType: string;
       turnTimerSeconds: number;
+      customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number };
     };
   };
   myPlayerId: string | null;
@@ -165,7 +159,7 @@ export interface GameWaitingRoomProps {
   onRemoveBot: (botId: string) => void;
   onKick: (playerId: string) => void;
   onStartGame: () => void;
-  onUpdateConfig: (updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }) => void;
+  onUpdateConfig: (updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string; customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number } }) => void;
   onChangeColor: (color: string) => void;
 }
 
@@ -178,13 +172,16 @@ const PLAYER_COLORS = [
   'bg-amber-800',
   'bg-purple-500',
   'bg-teal-500',
+  'bg-pink-500',
+  'bg-gray-900',
 ];
 
-const COLOR_NAMES = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal'];
+const COLOR_NAMES = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal', 'pink', 'black'];
 
 const COLOR_BG_MAP: Record<string, string> = {
   red: 'bg-red-500', blue: 'bg-blue-500', white: 'bg-gray-200', orange: 'bg-orange-500',
   green: 'bg-green-500', brown: 'bg-amber-800', purple: 'bg-purple-500', teal: 'bg-teal-500',
+  pink: 'bg-pink-500', black: 'bg-gray-900',
 };
 
 const BOT_STRATEGIES = [
@@ -216,7 +213,7 @@ export function GameWaitingRoom({
   const canAddMore = lobby.players.length < 8;
 
   return (
-    <div className="min-h-screen text-white flex flex-col">
+    <div className="flex-1 min-h-0 text-white flex flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b border-gray-700 px-4 py-4 sm:px-6">
         <h1 className="text-2xl font-bold">{lobby.name}</h1>
@@ -225,9 +222,9 @@ export function GameWaitingRoom({
         </p>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-6 p-4 sm:p-6 max-w-5xl mx-auto w-full">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-6 p-4 sm:p-6 max-w-5xl mx-auto w-full overflow-hidden">
         {/* Player List */}
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-3 overflow-y-auto min-h-0">
           <h2 className="text-lg font-semibold mb-3">{t('common.players')}</h2>
 
           {lobby.players.map((player, idx) => (
@@ -348,7 +345,7 @@ export function GameWaitingRoom({
         </div>
 
         {/* Settings panel + actions */}
-        <div className="lg:w-72 space-y-4">
+        <div className="lg:w-72 lg:flex-shrink-0 space-y-4 overflow-y-auto overflow-x-hidden scrollbar-hide min-h-0 pb-4">
           {/* Game settings */}
           <div className="bg-gray-800 rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-sm text-gray-300 uppercase tracking-wider">{t('common.settings')}</h3>
@@ -368,6 +365,26 @@ export function GameWaitingRoom({
                     currentMap={lobby.config.mapType}
                     onSelect={(m) => onUpdateConfig({ mapType: m })}
                   />
+                )}
+                {/* Custom map configurator */}
+                {lobby.config.mapType === 'custom' && isHost && (
+                  <div className="mt-2">
+                    <CustomMapConfigurator
+                      tileCount={lobby.config.customMapConfig?.tileCount ?? 37}
+                      shape={lobby.config.customMapConfig?.shape ?? 'round'}
+                      seed={lobby.config.customMapConfig?.seed ?? ''}
+                      resourceRatio={lobby.config.customMapConfig?.resourceRatio}
+                      desertRatio={lobby.config.customMapConfig?.desertRatio}
+                      waterRatio={lobby.config.customMapConfig?.waterRatio}
+                      onChange={(cfg) => onUpdateConfig({ customMapConfig: cfg })}
+                    />
+                  </div>
+                )}
+                {lobby.config.mapType === 'custom' && !isHost && lobby.config.customMapConfig && (
+                  <div className="mt-1 text-xs text-gray-400">
+                    {lobby.config.customMapConfig.tileCount} {t('map.custom_tileCount')} · {t(`map.custom_${lobby.config.customMapConfig.shape}`)}
+                    {lobby.config.customMapConfig.seed && ` · ${lobby.config.customMapConfig.seed}`}
+                  </div>
                 )}
               </div>
               <div>

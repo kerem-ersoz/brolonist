@@ -5,6 +5,7 @@ import { assetPath } from '../../utils/sprites';
 const PLAYER_COLORS: Record<string, string> = {
   red: '#e53935', blue: '#1e88e5', white: '#eeeeee', orange: '#fb8c00',
   green: '#43a047', brown: '#6d4c41', purple: '#8e24aa', teal: '#00897b',
+  pink: '#ec407a', black: '#212121',
 };
 
 interface EdgeProps {

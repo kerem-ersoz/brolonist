@@ -818,17 +818,23 @@ function GamePageInner() {
   if (!gameState) {
     if (connectionStatus === 'connected' && currentLobby && myPlayerId) {
       return (
-        <GameWaitingRoom
-          lobby={currentLobby}
-          myPlayerId={myPlayerId}
-          onReady={(ready) => sendMessage('ready', { ready })}
-          onAddBot={(strategy) => sendMessage('add_bot', { strategy })}
-          onRemoveBot={(botId) => sendMessage('remove_bot', { botId })}
-          onKick={(targetId) => sendMessage('kick_player', { targetId })}
-          onStartGame={() => sendMessage('start_game', {})}
-          onUpdateConfig={(updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }) => sendMessage('update_config', updates)}
-          onChangeColor={(color: string) => sendMessage('change_color', { color })}
-        />
+        <div className="h-screen flex flex-col">
+          <Navbar userName={user?.name} connectionStatus={connectionStatus} onLogout={logout}
+            onLeaveGame={() => { window.location.href = '/'; }}
+            leaveGameLabel={t('lobby.leave', 'Leave Lobby')}
+          />
+          <GameWaitingRoom
+            lobby={currentLobby}
+            myPlayerId={myPlayerId}
+            onReady={(ready) => sendMessage('ready', { ready })}
+            onAddBot={(strategy) => sendMessage('add_bot', { strategy })}
+            onRemoveBot={(botId) => sendMessage('remove_bot', { botId })}
+            onKick={(targetId) => sendMessage('kick_player', { targetId })}
+            onStartGame={() => sendMessage('start_game', {})}
+            onUpdateConfig={(updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }) => sendMessage('update_config', updates)}
+            onChangeColor={(color: string) => sendMessage('change_color', { color })}
+          />
+        </div>
       );
     }
 

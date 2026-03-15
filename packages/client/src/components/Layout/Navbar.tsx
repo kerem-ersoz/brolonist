@@ -7,11 +7,12 @@ interface NavbarProps {
   connectionStatus: string;
   onLogout: () => void;
   onLeaveGame?: () => void;
+  leaveGameLabel?: string;
   turnDeadline?: string | null;
   turnTimerSeconds?: number;
 }
 
-export function Navbar({ userName, connectionStatus, onLogout, onLeaveGame, turnDeadline, turnTimerSeconds }: NavbarProps) {
+export function Navbar({ userName, connectionStatus, onLogout, onLeaveGame, leaveGameLabel, turnDeadline, turnTimerSeconds }: NavbarProps) {
   const { t, i18n } = useTranslation();
   const statusColor = connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500';
 
@@ -47,7 +48,7 @@ export function Navbar({ userName, connectionStatus, onLogout, onLeaveGame, turn
         {userName && <span className="text-gray-300 text-sm">{userName}</span>}
         {onLeaveGame && (
           <button onClick={onLeaveGame} className="text-red-400 hover:text-red-300 text-sm">
-            {t('game.leave', 'Leave Game')}
+            {leaveGameLabel || t('game.leave', 'Leave Game')}
           </button>
         )}
         <button onClick={() => setSettingsOpen(true)} className="text-gray-400 hover:text-white text-sm" title="Settings">

@@ -102,12 +102,13 @@ export function distributeInitialResources(
   state: GameState,
   playerId: string,
   vertex: VertexId,
-): void {
-  if (state.setupRound !== 2) return;
+): Record<string, number> | null {
+  if (state.setupRound !== 2) return null;
 
   const player = state.players.find((p) => p.id === playerId);
-  if (!player) return;
+  if (!player) return null;
 
+  const resources: Record<string, number> = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
   const adjHexes = vertexAdjacentHexes(vertex);
   for (const adjHex of adjHexes) {
     const hex = state.board.hexes.find((h) => hexEquals(h.coord, adjHex));
@@ -115,7 +116,11 @@ export function distributeInitialResources(
     const resource = TERRAIN_RESOURCE[hex.terrain];
     if (!resource) continue;
     player.resources[resource] += 1;
+    resources[resource] += 1;
   }
+
+  const total = Object.values(resources).reduce((a, b) => a + b, 0);
+  return total > 0 ? resources : null;
 }
 
 /** Advance setup to the next player or transition to playing phase. Mutates state. */

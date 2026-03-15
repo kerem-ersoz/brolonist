@@ -49,6 +49,8 @@ const PLAYER_COLOR_DOT: Record<string, string> = {
   brown: 'bg-amber-700',
   purple: 'bg-purple-500',
   teal: 'bg-teal-500',
+  pink: 'bg-pink-500',
+  black: 'bg-gray-900',
 };
 
 function formatResources(resources: Record<string, number>): string {

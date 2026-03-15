@@ -29,6 +29,8 @@ const PLAYER_COLORS: Record<string, string> = {
   brown: '#92400e',
   purple: '#a855f7',
   teal: '#14b8a6',
+  pink: '#ec4899',
+  black: '#1f2937',
 };
 
 interface TradeModalProps {

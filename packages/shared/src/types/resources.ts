@@ -126,4 +126,6 @@ export enum PlayerColor {
   Brown = 'brown',
   Purple = 'purple',
   Teal = 'teal',
+  Pink = 'pink',
+  Black = 'black',
 }

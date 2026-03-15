@@ -6,9 +6,9 @@ export interface Point {
 }
 
 // Axial-to-pixel conversion (pointy-top hexagons)
-export function axialToPixel(q: number, r: number, size: number, gap = 5): Point {
+export function axialToPixel(q: number, r: number, size: number, gap = 6): Point {
   const s = size + gap;
-  const sv = size + gap - 2;
+  const sv = size + gap - 4;
   const x = s * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r);
   const y = sv * ((3 / 2) * r);
   return { x, y };
@@ -36,7 +36,6 @@ export function hexCorners(q: number, r: number, size: number): Point[] {
 /** Pixel position of a vertex (N = corner 0 / top, S = corner 3 / bottom). */
 export function vertexToPixel(vertex: VertexId, size: number): Point {
   const center = axialToPixel(vertex.hex.q, vertex.hex.r, size);
-  // N vertex = corner 0 at angle -90°, S vertex = corner 3 at angle 90°
   const angleDeg = vertex.direction === VertexDirection.N ? -90 : 90;
   const angleRad = (Math.PI / 180) * angleDeg;
   return {

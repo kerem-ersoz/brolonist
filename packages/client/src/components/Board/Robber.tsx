@@ -46,10 +46,10 @@ export function Robber({ hex, size, draggable }: RobberProps) {
     >
       <image
         href={assetPath('assets/sprites/robber.png')}
-        x={-size * 0.525}
-        y={-size * 0.675}
-        width={size * 1.05}
-        height={size * 1.05}
+        x={-size * 0.656}
+        y={-size * 0.844}
+        width={size * 1.3125}
+        height={size * 1.3125}
       />
     </g>
   );

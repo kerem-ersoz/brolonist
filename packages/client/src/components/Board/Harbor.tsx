@@ -1,103 +1,105 @@
+import { useState } from 'react';
 import { assetPath } from '../../utils/sprites';
-import { axialToPixel, vertexToPixel, type VertexId } from '@brolonist/shared';
+import { axialToPixel, hexCorners, hexNeighborInDirection } from '@brolonist/shared';
 
-const HARBOR_LABELS: Record<string, string> = {
-  generic: '3:1', brick: '2:1', lumber: '2:1', ore: '2:1',
-  grain: '2:1', wool: '2:1',
-};
-
-const HARBOR_RESOURCE_ICONS: Record<string, string> = {
-  brick: 'icon-brick.png',
-  lumber: 'icon-wood.png',
-  ore: 'icon-ore.png',
-  grain: 'icon-grain.png',
-  wool: 'icon-sheep.png',
+const SHIP_SPRITES: Record<string, string> = {
+  generic: 'ship-general.png',
+  brick: 'ship-brick.png',
+  lumber: 'ship-wood.png',
+  ore: 'ship-ore.png',
+  grain: 'ship-grain.png',
+  wool: 'ship-sheep.png',
 };
 
 interface HarborProps {
   position: { q: number; r: number };
-  vertices: [VertexId, VertexId];
+  vertices: unknown;
   type: string;
   size: number;
+  facing?: number;
 }
 
-export function Harbor({ position, vertices, type, size }: HarborProps) {
-  const waterCenter = axialToPixel(position.q, position.r, size);
-  const v1Pos = vertexToPixel(vertices[0], size);
-  const v2Pos = vertexToPixel(vertices[1], size);
+// When facing=D (water→land direction), the shared edge corners on the LAND hex
+// are at direction (D+3)%6 from land's perspective.
+// Corner pairs for each direction FROM the land hex toward water:
+const DIR_TO_LAND_CORNERS: Record<number, [number, number]> = {
+  0: [1, 2], // water is E of land
+  1: [2, 3], // water is SE
+  2: [3, 4], // water is SW
+  3: [4, 5], // water is W
+  4: [5, 0], // water is NW
+  5: [0, 1], // water is NE
+};
 
-  // Place harbor at the midpoint of the two vertices, offset toward the water hex
+export function Harbor({ position, type, size, facing }: HarborProps) {
+  if (facing == null) return null;
+
+  const waterCenter = axialToPixel(position.q, position.r, size);
+  const landHex = hexNeighborInDirection(position, facing);
+  const landCorners = hexCorners(landHex.q, landHex.r, size);
+
+  // Direction from land to water is (facing + 3) % 6
+  const landToWaterDir = (facing + 3) % 6;
+  const [c1, c2] = DIR_TO_LAND_CORNERS[landToWaterDir];
+  const v1Pos = landCorners[c1];
+  const v2Pos = landCorners[c2];
+
   const edgeMidX = (v1Pos.x + v2Pos.x) / 2;
   const edgeMidY = (v1Pos.y + v2Pos.y) / 2;
 
-  // Offset from edge midpoint toward water center
   const toWaterX = waterCenter.x - edgeMidX;
   const toWaterY = waterCenter.y - edgeMidY;
   const dist = Math.sqrt(toWaterX * toWaterX + toWaterY * toWaterY) || 1;
-  const offsetDist = size * 0.55;
+  const offsetDist = size * 1.1;
   const harborX = edgeMidX + (toWaterX / dist) * offsetDist;
   const harborY = edgeMidY + (toWaterY / dist) * offsetDist;
 
-  const resourceIcon = HARBOR_RESOURCE_ICONS[type];
-  const is21 = !!resourceIcon;
-  const boxW = is21 ? size * 0.65 : size * 0.6;
-  const boxH = is21 ? size * 0.55 : size * 0.3;
+  const shipSprite = SHIP_SPRITES[type] || SHIP_SPRITES.generic;
+  const shipSize = size * 1.35;
+
+  // Bridge dimensions
+  const bridgeWidth = size * 0.234;
+  const [bridgeLoaded, setBridgeLoaded] = useState(false);
+
+  function renderBridge(x1: number, y1: number, x2: number, y2: number, key: string) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    return (
+      <g key={key}>
+        {!bridgeLoaded && (
+          <line
+            x1={x1} y1={y1} x2={x2} y2={y2}
+            stroke="#8B7355" strokeWidth={bridgeWidth} strokeLinecap="round"
+          />
+        )}
+        <image
+          href={assetPath('assets/sprites/bridge.png')}
+          x={x1}
+          y={y1 - bridgeWidth / 2}
+          width={len}
+          height={bridgeWidth}
+          transform={`rotate(${angle}, ${x1}, ${y1})`}
+          preserveAspectRatio="none"
+          onLoad={() => setBridgeLoaded(true)}
+        />
+      </g>
+    );
+  }
 
   return (
     <g>
-      {/* Bridges from harbor to each vertex */}
-      <line
-        x1={harborX} y1={harborY} x2={v1Pos.x} y2={v1Pos.y}
-        stroke="#8B7355" strokeWidth={size * 0.06} strokeLinecap="round"
-      />
-      <line
-        x1={harborX} y1={harborY} x2={v2Pos.x} y2={v2Pos.y}
-        stroke="#8B7355" strokeWidth={size * 0.06} strokeLinecap="round"
-      />
-      {/* Small circles at bridge endpoints on vertices */}
-      <circle cx={v1Pos.x} cy={v1Pos.y} r={size * 0.06} fill="#8B7355" />
-      <circle cx={v2Pos.x} cy={v2Pos.y} r={size * 0.06} fill="#8B7355" />
+      {renderBridge(v1Pos.x, v1Pos.y, harborX, harborY, 'b1')}
+      {renderBridge(v2Pos.x, v2Pos.y, harborX, harborY, 'b2')}
 
-      {/* Harbor body */}
-      <circle cx={harborX} cy={harborY} r={size * 0.25} fill="#2a4858" stroke="#4a90d9" strokeWidth={1} />
       <image
-        href={assetPath('assets/sprites/harbor.svg')}
-        x={harborX - size * 0.4}
-        y={harborY - size * 0.4}
-        width={size * 0.8}
-        height={size * 0.8}
+        href={assetPath(`assets/sprites/${shipSprite}`)}
+        x={harborX - shipSize / 2}
+        y={harborY - shipSize / 2}
+        width={shipSize}
+        height={shipSize}
       />
-
-      {/* Label container */}
-      <rect
-        x={harborX - boxW / 2}
-        y={harborY - boxH / 2}
-        width={boxW}
-        height={boxH}
-        fill="rgba(255,255,255,0.85)"
-        rx={size * 0.05}
-      />
-
-      {/* Ratio text — centered if generic, above icon if specialized */}
-      <text
-        x={harborX}
-        y={is21 ? harborY - boxH * 0.18 : harborY}
-        textAnchor="middle" dominantBaseline="central"
-        fontSize={size * 0.2} fill="#333" fontWeight="bold" fontFamily="Display, sans-serif"
-      >
-        {HARBOR_LABELS[type] || '3:1'}
-      </text>
-
-      {/* Resource icon below the numbers for 2:1 harbors */}
-      {resourceIcon && (
-        <image
-          href={assetPath(`assets/sprites/${resourceIcon}`)}
-          x={harborX - size * 0.3}
-          y={harborY - size * 0.05}
-          width={size * 0.6}
-          height={size * 0.6}
-        />
-      )}
     </g>
   );
 }

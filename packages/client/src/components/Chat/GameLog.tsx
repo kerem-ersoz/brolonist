@@ -20,6 +20,7 @@ interface GameLogProps {
 const COLOR_MAP: Record<string, string> = {
   red: 'text-red-400', blue: 'text-blue-400', white: 'text-gray-200', orange: 'text-orange-400',
   green: 'text-lime-400', brown: 'text-yellow-800', purple: 'text-purple-400', teal: 'text-teal-400',
+  pink: 'text-pink-400', black: 'text-gray-400',
 };
 
 const RESOURCE_SPRITES: Record<string, string> = {

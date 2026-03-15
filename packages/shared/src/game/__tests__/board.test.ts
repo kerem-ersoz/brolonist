@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TerrainType, HarborType } from '../../types/resources.js';
-import { MapType } from '../../types/game.js';
+import { MapType, BoardShape } from '../../types/game.js';
+import type { CustomMapConfig } from '../../types/game.js';
 import {
   generateBoard,
   generateTerrainAssignment,
@@ -201,5 +202,165 @@ describe('generateHarbors', () => {
     const types = new Set(harbors.map((h) => h.type));
     expect(types.has(HarborType.Generic)).toBe(true);
     expect(types.size).toBeGreaterThan(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Custom (procedural) board generation
+// ---------------------------------------------------------------------------
+
+describe('generateBoard with Custom mapType', () => {
+  const testCases = [
+    { tileCount: 19, shape: BoardShape.Round },
+    { tileCount: 50, shape: BoardShape.Round },
+    { tileCount: 100, shape: BoardShape.Elongated },
+    { tileCount: 50, shape: BoardShape.Star },
+    { tileCount: 37, shape: BoardShape.Random },
+    { tileCount: 200, shape: BoardShape.Round },
+  ];
+
+  for (const { tileCount, shape } of testCases) {
+    describe(`tileCount=${tileCount}, shape=${shape}`, () => {
+      const board = generateBoard({
+        playerCount: 4,
+        mapType: MapType.Custom,
+        customMapConfig: { tileCount, shape },
+      });
+
+      it('produces the correct number of hexes', () => {
+        expect(board.hexes).toHaveLength(tileCount);
+      });
+
+      it('has at least 1 desert', () => {
+        const deserts = board.hexes.filter(h => h.terrain === TerrainType.Desert);
+        expect(deserts.length).toBeGreaterThanOrEqual(1);
+      });
+
+      it('all non-desert hexes have number tokens', () => {
+        for (const h of board.hexes) {
+          if (h.terrain !== TerrainType.Desert) {
+            expect(h.numberToken).not.toBeNull();
+            expect(h.numberToken).toBeGreaterThanOrEqual(2);
+            expect(h.numberToken).toBeLessThanOrEqual(12);
+          }
+        }
+      });
+
+      it('no number token is 7', () => {
+        for (const h of board.hexes) {
+          expect(h.numberToken).not.toBe(7);
+        }
+      });
+
+      it('desert hexes have no number token', () => {
+        for (const h of board.hexes) {
+          if (h.terrain === TerrainType.Desert) {
+            expect(h.numberToken).toBeNull();
+          }
+        }
+      });
+
+      it('has at least 5 harbors', () => {
+        expect(board.harbors.length).toBeGreaterThanOrEqual(5);
+      });
+
+      it('each harbor has 2 vertices', () => {
+        for (const h of board.harbors) {
+          expect(h.vertices).toHaveLength(2);
+        }
+      });
+
+      it('has both generic and specific harbors', () => {
+        const types = new Set(board.harbors.map(h => h.type));
+        expect(types.has(HarborType.Generic)).toBe(true);
+        expect(types.size).toBeGreaterThan(1);
+      });
+
+      it('has water hexes', () => {
+        expect(board.waterHexes.length).toBeGreaterThan(0);
+      });
+
+      it('initializes empty building maps', () => {
+        expect(board.vertexBuildings.size).toBe(0);
+        expect(board.edgeBuildings.size).toBe(0);
+      });
+    });
+  }
+});
+
+describe('generateBoard with custom ratios', () => {
+  it('0% desert and 0% water means all tiles are resource', () => {
+    const board = generateBoard({
+      playerCount: 4,
+      mapType: MapType.Custom,
+      customMapConfig: { tileCount: 37, shape: BoardShape.Round, resourceRatio: 100, desertRatio: 0, waterRatio: 0 },
+    });
+    const deserts = board.hexes.filter(h => h.terrain === TerrainType.Desert);
+    expect(deserts).toHaveLength(0);
+    // All 37 canvas tiles become land
+    expect(board.hexes).toHaveLength(37);
+  });
+
+  it('50/50 resource/desert splits land tiles roughly evenly', () => {
+    const board = generateBoard({
+      playerCount: 4,
+      mapType: MapType.Custom,
+      customMapConfig: { tileCount: 50, shape: BoardShape.Round, resourceRatio: 50, desertRatio: 50, waterRatio: 0 },
+    });
+    const deserts = board.hexes.filter(h => h.terrain === TerrainType.Desert);
+    // 50% of 50 canvas = 25 desert tiles
+    expect(deserts.length).toBeGreaterThanOrEqual(24);
+    // All canvas tiles are land (no water ratio)
+    expect(board.hexes).toHaveLength(50);
+  });
+
+  it('water ratio reduces land tile count', () => {
+    const board = generateBoard({
+      playerCount: 4,
+      mapType: MapType.Custom,
+      customMapConfig: { tileCount: 50, shape: BoardShape.Round, resourceRatio: 60, desertRatio: 0, waterRatio: 40 },
+    });
+    // 40% of 50 canvas = ~20 water → ~30 land tiles
+    expect(board.hexes.length).toBeLessThanOrEqual(35);
+    expect(board.hexes.length).toBeGreaterThanOrEqual(25);
+    expect(board.waterHexes.length).toBeGreaterThan(0);
+  });
+
+  it('default ratios (~95/5/0) produce mostly resource with some desert', () => {
+    const board = generateBoard({
+      playerCount: 4,
+      mapType: MapType.Custom,
+      customMapConfig: { tileCount: 19, shape: BoardShape.Round },
+    });
+    const deserts = board.hexes.filter(h => h.terrain === TerrainType.Desert);
+    // Default: ~5% of 19 = ~1 desert, rest resource. Land count = 19 (0% water)
+    expect(deserts.length).toBeGreaterThanOrEqual(1);
+    expect(board.hexes).toHaveLength(19);
+  });
+
+  it('100% water ratio produces 0 land tiles', () => {
+    const board = generateBoard({
+      playerCount: 4,
+      mapType: MapType.Custom,
+      customMapConfig: { tileCount: 19, shape: BoardShape.Round, resourceRatio: 0, desertRatio: 0, waterRatio: 100 },
+    });
+    expect(board.hexes).toHaveLength(0);
+    expect(board.waterHexes.length).toBeGreaterThan(0);
+  });
+});
+
+describe('generateBoard with seed', () => {
+  it('same seed produces same board layout', () => {
+    const config: { playerCount: number; mapType: MapType; customMapConfig: CustomMapConfig } = {
+      playerCount: 4,
+      mapType: MapType.Custom,
+      customMapConfig: { tileCount: 50, shape: BoardShape.Random, seed: 'test-seed-123' },
+    };
+    const a = generateBoard(config);
+    const b = generateBoard(config);
+    // Hex coordinates should be identical
+    const aCoords = a.hexes.map(h => `${h.coord.q},${h.coord.r}`).sort();
+    const bCoords = b.hexes.map(h => `${h.coord.q},${h.coord.r}`).sort();
+    expect(aCoords).toEqual(bCoords);
   });
 });

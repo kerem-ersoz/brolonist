@@ -36,6 +36,8 @@ const PLAYER_COLORS: Record<string, string> = {
   brown: 'bg-amber-800',
   purple: 'bg-purple-600',
   teal: 'bg-teal-600',
+  pink: 'bg-pink-500',
+  black: 'bg-gray-900',
 };
 
 const PLAYER_BORDER_COLORS: Record<string, string> = {
@@ -47,6 +49,8 @@ const PLAYER_BORDER_COLORS: Record<string, string> = {
   brown: 'border-amber-700',
   purple: 'border-purple-500',
   teal: 'border-teal-500',
+  pink: 'border-pink-400',
+  black: 'border-gray-700',
 };
 
 const RESOURCE_ICONS: Record<string, { icon: string; color: string }> = {

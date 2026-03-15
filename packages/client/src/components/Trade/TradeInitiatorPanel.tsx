@@ -31,6 +31,7 @@ const RESOURCE_EMOJI: Record<string, string> = {
 const PLAYER_COLORS: Record<string, string> = {
   red: '#ef4444', blue: '#3b82f6', white: '#d1d5db', orange: '#f97316',
   green: '#22c55e', brown: '#92400e', purple: '#a855f7', teal: '#14b8a6',
+  pink: '#ec4899', black: '#1f2937',
 };
 
 interface PlayerInfo {

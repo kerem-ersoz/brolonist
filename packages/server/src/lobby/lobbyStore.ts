@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getRedis } from '../store/redis.js';
+import { hub } from '../ws/hub.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const turkishWords: string[] = JSON.parse(
@@ -50,6 +51,7 @@ export interface GameLobby {
     mapType: string;
     turnTimerSeconds: number;
     isPrivate: boolean;
+    customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number };
   };
   status: 'lobby' | 'playing' | 'finished';
   createdAt: string;
@@ -75,7 +77,7 @@ export function createLobbyGame(
     config: {
       victoryPoints: 10,
       mapType: 'standard',
-      turnTimerSeconds: 120,
+      turnTimerSeconds: 90,
       isPrivate: opts.isPrivate ?? false,
     },
     status: 'lobby',
@@ -216,7 +218,7 @@ export function removeBotFromLobby(
 
 export function updateLobbyConfig(
   gameId: string,
-  updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string },
+  updates: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string; customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number } },
 ): GameLobby | null {
   const game = lobbyGames.get(gameId);
   if (!game || game.status !== 'lobby') return null;
@@ -227,9 +229,38 @@ export function updateLobbyConfig(
     game.config.turnTimerSeconds = updates.turnTimerSeconds;
   }
   if (updates.mapType !== undefined) {
-    const validMaps = ['standard', 'random', 'pangaea', 'archipelago', 'rich_coast', 'desert_ring', 'turkey', 'world', 'diamond', 'british_isles', 'gear', 'lakes'];
+    const validMaps = ['standard', 'random', 'pangaea', 'archipelago', 'rich_coast', 'desert_ring', 'turkey', 'world', 'diamond', 'british_isles', 'gear', 'lakes', 'custom'];
     if (validMaps.includes(updates.mapType)) {
       game.config.mapType = updates.mapType;
+    }
+  }
+  if (updates.customMapConfig !== undefined) {
+    const validShapes = ['round', 'elongated', 'star', 'random'];
+    const cfg = updates.customMapConfig;
+    if (cfg && typeof cfg.tileCount === 'number' && validShapes.includes(cfg.shape)) {
+      const tileCount = Math.min(200, Math.max(19, Math.round(cfg.tileCount)));
+      const seed = typeof cfg.seed === 'string' ? cfg.seed.slice(0, 32) : undefined;
+      // Validate ratios: each 0–100, clamp and normalize to sum=100
+      let rr = typeof cfg.resourceRatio === 'number' ? Math.max(0, Math.min(100, Math.round(cfg.resourceRatio))) : undefined;
+      let dr = typeof cfg.desertRatio === 'number' ? Math.max(0, Math.min(100, Math.round(cfg.desertRatio))) : undefined;
+      let wr = typeof cfg.waterRatio === 'number' ? Math.max(0, Math.min(100, Math.round(cfg.waterRatio))) : undefined;
+      // Normalize if all three provided and don't sum to 100
+      if (rr !== undefined && dr !== undefined && wr !== undefined) {
+        const sum = rr + dr + wr;
+        if (sum > 0 && sum !== 100) {
+          rr = Math.round(rr * 100 / sum);
+          dr = Math.round(dr * 100 / sum);
+          wr = 100 - rr - dr;
+        }
+      }
+      game.config.customMapConfig = {
+        tileCount,
+        shape: cfg.shape,
+        ...(seed !== undefined ? { seed } : {}),
+        ...(rr !== undefined ? { resourceRatio: rr } : {}),
+        ...(dr !== undefined ? { desertRatio: dr } : {}),
+        ...(wr !== undefined ? { waterRatio: wr } : {}),
+      };
     }
   }
   persistLobbyToRedis(gameId, game);
@@ -313,13 +344,14 @@ export async function loadLobbiesFromRedis(): Promise<number> {
 
 let persistInterval: ReturnType<typeof setInterval> | null = null;
 
-/** Start periodic lobby persistence (every 30s). */
+/** Start periodic lobby persistence (every 30s) and cleanup (every 30s). */
 export function startLobbyPersistence(): void {
   if (persistInterval) return;
   persistInterval = setInterval(() => {
     persistAllLobbies().catch(() => {});
+    cleanupAbandonedLobbies();
   }, 30_000);
-  console.log('[Lobby] Periodic persistence enabled (30s interval)');
+  console.log('[Lobby] Periodic persistence + cleanup enabled (30s interval)');
 }
 
 /** Stop periodic lobby persistence. */
@@ -327,5 +359,60 @@ export function stopLobbyPersistence(): void {
   if (persistInterval) {
     clearInterval(persistInterval);
     persistInterval = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Abandoned lobby cleanup
+// ---------------------------------------------------------------------------
+
+const LOBBY_ABANDON_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+
+// Track when each lobby last had a connected human player
+const lastHumanActivity = new Map<string, number>();
+
+/** Check if a lobby has any human players currently connected via WebSocket. */
+function lobbyHasConnectedHumans(lobby: GameLobby): boolean {
+  const humanPlayers = lobby.players.filter(p => !p.isBot);
+  for (const player of humanPlayers) {
+    const client = hub.getClient(player.id);
+    if (client && client.gameId === lobby.id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Remove lobbies that have had no connected human players for 2 minutes. */
+function cleanupAbandonedLobbies(): void {
+  const now = Date.now();
+  for (const [id, lobby] of lobbyGames) {
+    // Only clean up lobbies in 'lobby' status (not active games)
+    if (lobby.status !== 'lobby') continue;
+
+    if (lobbyHasConnectedHumans(lobby)) {
+      // Lobby is active — reset the timer
+      lastHumanActivity.set(id, now);
+    } else {
+      // No humans connected
+      const lastSeen = lastHumanActivity.get(id) ?? now;
+      if (!lastHumanActivity.has(id)) {
+        // First time noticing no humans — start the clock
+        lastHumanActivity.set(id, now);
+      } else if (now - lastSeen >= LOBBY_ABANDON_TIMEOUT_MS) {
+        // 2 minutes with no humans — delete the lobby
+        console.log(`[Lobby] Cleaning up abandoned lobby "${lobby.name}" (${id})`);
+        lobbyGames.delete(id);
+        lastHumanActivity.delete(id);
+        persistLobbyToRedis(id, null);
+      }
+    }
+  }
+
+  // Clean up tracking entries for deleted lobbies
+  for (const id of lastHumanActivity.keys()) {
+    if (!lobbyGames.has(id)) {
+      lastHumanActivity.delete(id);
+    }
   }
 }

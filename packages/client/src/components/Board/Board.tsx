@@ -165,11 +165,10 @@ export function Board({
     >
       <defs>
         <filter id="building-shadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.7" />
+          <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.2" />
         </filter>
         <filter id="road-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#000" floodOpacity="1" />
-          <feDropShadow dx="0" dy="0" stdDeviation="1" floodColor="#000" floodOpacity="0.6" />
+          <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#000" floodOpacity="0.2" />
         </filter>
       </defs>
       {/* Water hexes */}
@@ -200,7 +199,7 @@ export function Board({
 
       {/* Harbors */}
       {board.harbors?.map((h, i) => (
-        <Harbor key={`hb${i}`} position={h.position} vertices={h.vertices} type={h.type} size={size} />
+        <Harbor key={`hb${i}`} position={h.position} vertices={h.vertices} type={h.type} size={size} facing={h.facing} />
       ))}
 
       {/* Edges (roads) — built roads rendered first */}

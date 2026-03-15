@@ -39,6 +39,7 @@ import {
   updateLobbyConfig,
 } from '../lobby/lobbyStore.js';
 import type { GameConfig } from '@brolonist/shared';
+import { BoardShape } from '@brolonist/shared';
 
 interface WsMessage {
   type: string;
@@ -119,7 +120,7 @@ function handleMessage(playerId: string, playerName: string, msg: WsMessage): vo
       handleStartGameFromLobby(playerId);
       break;
     case 'update_config':
-      handleUpdateConfig(playerId, msg.payload as { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string });
+      handleUpdateConfig(playerId, msg.payload as { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string; customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number } });
       break;
     case 'change_color':
       handleChangeColor(playerId, msg.payload as { color: string });
@@ -289,7 +290,7 @@ function handleKickPlayer(playerId: string, payload: { targetId: string }): void
   broadcastLobbyState(client.gameId);
 }
 
-function handleUpdateConfig(playerId: string, payload: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string }): void {
+function handleUpdateConfig(playerId: string, payload: { victoryPoints?: number; turnTimerSeconds?: number; mapType?: string; customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number } }): void {
   const client = hub.getClient(playerId);
   if (!client?.gameId) return;
   const lobby = getLobbyGame(client.gameId);
@@ -306,7 +307,7 @@ function handleChangeColor(playerId: string, payload: { color: string }): void {
   if (!client?.gameId) return;
   const lobby = getLobbyGame(client.gameId);
   if (!lobby) return;
-  const validColors = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal'];
+  const validColors = ['red', 'blue', 'white', 'orange', 'green', 'brown', 'purple', 'teal', 'pink', 'black'];
   if (!validColors.includes(payload.color)) {
     hub.send(playerId, 'error', { code: 'INVALID_COLOR', message: 'Invalid color' });
     return;
@@ -360,6 +361,16 @@ function handleStartGameFromLobby(playerId: string): void {
     turnTimerSeconds: lobby.config.turnTimerSeconds,
     discardTimerSeconds: 30,
     isPrivate: lobby.config.isPrivate,
+    ...(lobby.config.customMapConfig ? {
+      customMapConfig: {
+        tileCount: lobby.config.customMapConfig.tileCount,
+        shape: lobby.config.customMapConfig.shape as BoardShape,
+        ...(lobby.config.customMapConfig.seed !== undefined ? { seed: lobby.config.customMapConfig.seed } : {}),
+        ...(lobby.config.customMapConfig.resourceRatio !== undefined ? { resourceRatio: lobby.config.customMapConfig.resourceRatio } : {}),
+        ...(lobby.config.customMapConfig.desertRatio !== undefined ? { desertRatio: lobby.config.customMapConfig.desertRatio } : {}),
+        ...(lobby.config.customMapConfig.waterRatio !== undefined ? { waterRatio: lobby.config.customMapConfig.waterRatio } : {}),
+      },
+    } : {}),
   };
 
   lobby.status = 'playing';

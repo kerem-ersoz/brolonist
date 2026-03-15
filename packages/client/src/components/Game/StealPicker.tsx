@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 const PLAYER_COLORS: Record<string, string> = {
   red: '#ef4444', blue: '#3b82f6', white: '#d1d5db', orange: '#f97316',
   green: '#22c55e', brown: '#92400e', purple: '#a855f7', teal: '#14b8a6',
+  pink: '#ec4899', black: '#1f2937',
 };
 
 interface PlayerInfo {
@@ -22,7 +23,7 @@ export function StealPicker({ targets, onPick }: StealPickerProps) {
   return (
     <div style={{ position: 'fixed', bottom: 108, left: 23, zIndex: 50 }} className="pointer-events-auto">
       <div className="bg-gray-800/95 backdrop-blur rounded-xl shadow-2xl p-4 border border-gray-600">
-        <p className="text-gray-300 text-xs font-semibold mb-2 text-center">🏴‍☠️ Steal from</p>
+        <p className="text-gray-300 text-xs font-semibold mb-2 text-center">🏴‍☠️ {t('game.stealFrom')}</p>
         <div className="flex gap-3 justify-center flex-wrap">
           {targets.map((player) => {
             const color = PLAYER_COLORS[player.color] || '#6b7280';

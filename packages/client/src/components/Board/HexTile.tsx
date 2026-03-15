@@ -74,9 +74,8 @@ export function HexTile({ q, r, terrain, numberToken, size, hasRobber, onClick, 
       <polygon
         points={points}
         fill={TERRAIN_COLORS[terrain] || TERRAIN_COLORS.water}
-        stroke={highlighted ? '#00ff88' : '#1a1a2e'}
-        strokeWidth={highlighted ? 3 : 1.5}
-        opacity={highlighted ? 0.9 : 1}
+        stroke={'#1a1a2e'}
+        strokeWidth={1.5}
       />
       <image
         href={assetPath(`assets/sprites/${spriteFile}`)}
@@ -84,24 +83,7 @@ export function HexTile({ q, r, terrain, numberToken, size, hasRobber, onClick, 
         y={center.y - imageSize / 2}
         width={imageSize}
         height={imageSize}
-        opacity={highlighted ? 0.9 : 1}
       />
-      {/* Darken overlay */}
-      <polygon
-        points={points}
-        fill="black"
-        opacity={0.25}
-        pointerEvents="none"
-      />
-      {highlighted && (
-        <polygon
-          points={points}
-          fill="none"
-          stroke="#00ff88"
-          strokeWidth={3}
-          pointerEvents="none"
-        />
-      )}
       {numberToken && (
         <g pointerEvents="none">
           {/* Programmatic Fallback Circle */}

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface DiscardPanelProps {
   discardCount: number;
   selectedCount: number;
@@ -5,6 +7,7 @@ interface DiscardPanelProps {
 }
 
 export function DiscardPanel({ discardCount, selectedCount, onConfirm }: DiscardPanelProps) {
+  const { t } = useTranslation();
   const remaining = discardCount - selectedCount;
   const canConfirm = remaining === 0;
 
@@ -12,7 +15,7 @@ export function DiscardPanel({ discardCount, selectedCount, onConfirm }: Discard
     <div style={{ position: 'fixed', bottom: 108, left: 23, zIndex: 50 }} className="pointer-events-auto">
       <div className="bg-gray-800/95 border border-red-500/60 rounded-xl px-5 py-3 shadow-2xl flex items-center gap-4 backdrop-blur-sm">
         <div className="text-sm">
-          <span className="text-white font-semibold">Discard </span>
+          <span className="text-white font-semibold">{t('game.discard')} </span>
           <span className={remaining > 0 ? 'text-red-400 font-bold' : 'text-green-400 font-bold'}>
             {selectedCount}/{discardCount}
           </span>
@@ -27,7 +30,7 @@ export function DiscardPanel({ discardCount, selectedCount, onConfirm }: Discard
               : 'bg-gray-700 text-gray-500 cursor-not-allowed'
           }`}
         >
-          Confirm
+          {t('game.discardConfirm')}
         </button>
       </div>
     </div>

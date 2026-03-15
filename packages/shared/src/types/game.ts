@@ -31,17 +31,32 @@ export enum PlayerStatus {
 
 export enum MapType {
   Standard = 'standard',
-  Random = 'random',
-  Pangaea = 'pangaea',
   Archipelago = 'archipelago',
-  RichCoast = 'rich_coast',
-  DesertRing = 'desert_ring',
-  Turkey = 'turkey',
   World = 'world',
   Diamond = 'diamond',
   BritishIsles = 'british_isles',
   Gear = 'gear',
   Lakes = 'lakes',
+  Custom = 'custom',
+}
+
+export enum BoardShape {
+  Round = 'round',
+  Elongated = 'elongated',
+  Star = 'star',
+  Random = 'random',
+}
+
+export interface CustomMapConfig {
+  tileCount: number;
+  shape: BoardShape;
+  seed?: string;
+  /** Percentage of hex positions that are resource-producing tiles (0–100). */
+  resourceRatio?: number;
+  /** Percentage of hex positions that are desert tiles (0–100). */
+  desertRatio?: number;
+  /** Percentage of hex positions that are internal water tiles (0–100). */
+  waterRatio?: number;
 }
 
 export interface HexTile {
@@ -65,6 +80,7 @@ export interface Building {
 export interface Board {
   hexes: HexTile[];
   waterHexes: HexCoord[];
+  vanityWaterHexes?: Array<{ coord: HexCoord; variant: number }>;
   harbors: Harbor[];
   vertexBuildings: Map<string, Building>;
   edgeBuildings: Map<string, Building>;
@@ -129,6 +145,7 @@ export interface GameConfig {
   discardTimerSeconds: number;
   isPrivate: boolean;
   password?: string;
+  customMapConfig?: CustomMapConfig;
 }
 
 export interface GameState {

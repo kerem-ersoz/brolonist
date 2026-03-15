@@ -1,21 +1,25 @@
-import { TerrainType, HarborType } from '../types/resources.js';
+import { TerrainType, HarborType, TERRAIN_RESOURCE } from '../types/resources.js';
 import type { Board, HexTile, Harbor } from '../types/game.js';
 import { MapType } from '../types/game.js';
 import type { HexCoord, VertexId } from '../hex/coordinates.js';
 import { VertexDirection, hexNeighbors, hexEquals } from '../hex/coordinates.js';
 import { generateHexGrid, generateWaterFrame } from '../hex/board-layout.js';
+import { generateProceduralGrid, hashSeed, mulberry32 } from '../hex/procedural.js';
+import type { CustomMapConfig } from '../types/game.js';
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-export function generateBoard(config: { playerCount: number; mapType: MapType }): Board {
+export function generateBoard(config: { playerCount: number; mapType: MapType; customMapConfig?: CustomMapConfig }): Board {
+  // Custom procedural board
+  if (config.mapType === MapType.Custom && config.customMapConfig) {
+    return generateCustomBoard(config.customMapConfig);
+  }
+
   // Custom board layouts
   if (config.mapType === MapType.Archipelago) {
     return generateArchipelagoBoard();
-  }
-  if (config.mapType === MapType.Turkey) {
-    return generateTurkeyBoard();
   }
   if (config.mapType === MapType.World) {
     return generateWorldBoard();
@@ -24,10 +28,10 @@ export function generateBoard(config: { playerCount: number; mapType: MapType })
     return generatePresetBoard(DIAMOND_HEXES, 9);
   }
   if (config.mapType === MapType.BritishIsles) {
-    return generatePresetBoard(BRITISH_ISLES_HEXES, 20);
+    return generatePresetBoard(BRITISH_ISLES_HEXES, 16);
   }
   if (config.mapType === MapType.Gear) {
-    return generatePresetBoard(GEAR_HEXES, 14);
+    return generatePresetBoard(GEAR_HEXES, 9);
   }
   if (config.mapType === MapType.Lakes) {
     return generateLakesBoard();
@@ -62,7 +66,6 @@ export function generateBoard(config: { playerCount: number; mapType: MapType })
 
 function generateArchipelagoBoard(): Board {
   // 4 compact islands at compass points, each = center + 4 contiguous neighbors
-  // Using 4 consecutive neighbor indices ensures every hex touches 2+ other island hexes
   const islands: { center: HexCoord; neighborIndices: number[] }[] = [
     { center: { q: -3, r: 0 },  neighborIndices: [0, 1, 2, 3] },  // West:  E,SE,SW,W
     { center: { q: 0, r: -3 },  neighborIndices: [1, 2, 3, 4] },  // North: SE,SW,W,NW
@@ -84,22 +87,32 @@ function generateArchipelagoBoard(): Board {
     }
   }
 
-  // Fill the center gap with desert hexes (hexes within radius 1 of origin not already terrain)
-  const desertHexes: HexCoord[] = [];
-  const center: HexCoord = { q: 0, r: 0 };
-  const candidates = [center, ...hexNeighbors(center)];
-  for (const h of candidates) {
+  // Center hex and its SW neighbor — both get the same resource with guaranteed 6/8
+  const centerHex: HexCoord = { q: 0, r: 0 };
+  const swHex: HexCoord = { q: -1, r: 1 }; // SW of center
+
+  // Desert hex in water, not adjacent to any land tile
+  // (3, 0) — NE of (2,1), surrounded by water
+  const desertHex: HexCoord = { q: 3, r: 0 };
+
+  const allTerrainHexes = [...terrainHexes, centerHex, swHex, desertHex];
+  terrainSet.add(`${centerHex.q},${centerHex.r}`);
+  terrainSet.add(`${swHex.q},${swHex.r}`);
+  terrainSet.add(`${desertHex.q},${desertHex.r}`);
+
+  // Center water hexes — neighbors of center/SW that aren't terrain
+  const centerWaterHexes: HexCoord[] = [];
+  const centerAreaHexes = new Set<string>();
+  for (const h of [...hexNeighbors(centerHex), ...hexNeighbors(swHex)]) {
     const key = `${h.q},${h.r}`;
-    if (!terrainSet.has(key)) {
-      desertHexes.push(h);
-      terrainSet.add(key);
+    if (!terrainSet.has(key) && !centerAreaHexes.has(key)) {
+      centerAreaHexes.add(key);
+      centerWaterHexes.push(h);
     }
   }
 
-  const allTerrainCoords = [...terrainHexes, ...desertHexes];
-
-  // Terrain assignment: islands get productive terrain, center gets desert
-  // 20 island hexes = 4 of each resource type
+  // Terrain assignment: 20 island hexes + center + SW = 22 resource tiles + 1 desert
+  const centerResourceType = [TerrainType.Hills, TerrainType.Forest, TerrainType.Mountains, TerrainType.Fields, TerrainType.Pasture][Math.floor(Math.random() * 5)];
   const terrainPool: TerrainType[] = [
     ...Array(4).fill(TerrainType.Hills),
     ...Array(4).fill(TerrainType.Forest),
@@ -107,159 +120,161 @@ function generateArchipelagoBoard(): Board {
     ...Array(4).fill(TerrainType.Fields),
     ...Array(4).fill(TerrainType.Pasture),
   ];
+  // Shuffle island terrain
   for (let i = terrainPool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [terrainPool[i], terrainPool[j]] = [terrainPool[j], terrainPool[i]];
   }
+  // Append center hex, SW hex (same resource), and desert
+  terrainPool.push(centerResourceType); // center
+  terrainPool.push(centerResourceType); // SW neighbor
+  terrainPool.push(TerrainType.Desert); // desert
 
-  const hexes: HexTile[] = [
-    ...terrainHexes.map((coord, i) => ({
-      coord,
-      terrain: terrainPool[i],
-      numberToken: null as number | null,
-    })),
-    ...desertHexes.map((coord) => ({
-      coord,
-      terrain: TerrainType.Desert,
-      numberToken: null as number | null,
-    })),
-  ];
-
-  generateNumberTokens(hexes);
-
-  const waterHexes = generateWaterFrame(allTerrainCoords);
-  const harbors = generateHarbors(allTerrainCoords, waterHexes, 4);
-
-  return {
-    hexes,
-    waterHexes,
-    harbors,
-    vertexBuildings: new Map(),
-    edgeBuildings: new Map(),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Turkey: Map shaped like Türkiye's borders
-// ---------------------------------------------------------------------------
-
-function generateTurkeyBoard(): Board {
-  // 96-hex map of Türkiye in pointy-top axial coordinates
-  // ~18 columns (q: -3..14) × ~8 rows (r: -4..3)
-  // Thrace on west, Bosphorus gap, Anatolia stretching east
-  // Aspect ratio ~3:1 matching Turkey's actual shape
-
-  const hexCoords: HexCoord[] = [
-    // r=-4: Extreme NE peaks (Artvin highlands, Ağrı)
-    { q: 12, r: -4 }, { q: 13, r: -4 }, { q: 14, r: -4 },
-
-    // r=-3: NE mountains (Trabzon-Rize hinterland, Kars, Ardahan, Iğdır)
-    { q: 8, r: -3 }, { q: 9, r: -3 }, { q: 10, r: -3 }, { q: 11, r: -3 }, { q: 12, r: -3 }, { q: 13, r: -3 }, { q: 14, r: -3 },
-
-    // r=-2: Black Sea coast east + NE interior (Samsun→Hopa, Erzurum, Kars plateau)
-    { q: -1, r: -2 }, { q: 0, r: -2 }, { q: 1, r: -2 },
-    { q: 4, r: -2 }, { q: 5, r: -2 }, { q: 6, r: -2 }, { q: 7, r: -2 }, { q: 8, r: -2 }, { q: 9, r: -2 }, { q: 10, r: -2 }, { q: 11, r: -2 }, { q: 12, r: -2 }, { q: 13, r: -2 }, { q: 14, r: -2 },
-
-    // r=-1: Thrace NE + Black Sea full coast (Sinop→Trabzon→Rize) + eastern interior
-    { q: -1, r: -1 }, { q: 0, r: -1 }, { q: 1, r: -1 },
-    { q: 4, r: -1 }, { q: 5, r: -1 }, { q: 6, r: -1 }, { q: 7, r: -1 }, { q: 8, r: -1 }, { q: 9, r: -1 }, { q: 10, r: -1 }, { q: 11, r: -1 }, { q: 12, r: -1 }, { q: 13, r: -1 }, { q: 14, r: -1 },
-
-    // r=0: Thrace (Edirne, Kırklareli, Tekirdağ) + [Bosphorus gap q=2,3] + W&Central Anatolia + East
-    { q: -3, r: 0 }, { q: -2, r: 0 }, { q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 },
-    { q: 4, r: 0 }, { q: 5, r: 0 }, { q: 6, r: 0 }, { q: 7, r: 0 }, { q: 8, r: 0 }, { q: 9, r: 0 }, { q: 10, r: 0 }, { q: 11, r: 0 }, { q: 12, r: 0 }, { q: 13, r: 0 }, { q: 14, r: 0 },
-
-    // r=1: Aegean coast + Marmara south + Med coast (Antalya, Mersin) + Central + SE
-    { q: -2, r: 1 }, { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 }, { q: 3, r: 1 }, { q: 4, r: 1 }, { q: 5, r: 1 }, { q: 6, r: 1 }, { q: 7, r: 1 }, { q: 8, r: 1 }, { q: 9, r: 1 }, { q: 10, r: 1 }, { q: 11, r: 1 }, { q: 12, r: 1 }, { q: 13, r: 1 },
-
-    // r=2: Aegean islands/coast + Med (Antalya-Mersin-Adana-Hatay) + Gaziantep-Şanlıurfa-Mardin
-    { q: -2, r: 2 }, { q: -1, r: 2 }, { q: 0, r: 2 }, { q: 1, r: 2 }, { q: 2, r: 2 }, { q: 3, r: 2 }, { q: 4, r: 2 }, { q: 5, r: 2 }, { q: 6, r: 2 }, { q: 7, r: 2 }, { q: 8, r: 2 }, { q: 9, r: 2 }, { q: 10, r: 2 }, { q: 11, r: 2 }, { q: 12, r: 2 },
-
-    // r=3: Southern Med coast tip (Hatay/İskenderun) + SE (Şırnak, Hakkari)
-    { q: 4, r: 3 }, { q: 5, r: 3 }, { q: 6, r: 3 }, { q: 7, r: 3 }, { q: 8, r: 3 }, { q: 9, r: 3 }, { q: 10, r: 3 }, { q: 11, r: 3 }, { q: 12, r: 3 },
-  ];
-
-  // Regional terrain assignment
-  const terrainMap: Record<string, TerrainType> = {};
-  const a = (q: number, r: number, t: TerrainType) => { terrainMap[`${q},${r}`] = t; };
-
-  // === Thrace (European Turkey) — flat agricultural land ===
-  a(-3, 0, TerrainType.Fields);   a(-2, 0, TerrainType.Pasture);  a(-1, 0, TerrainType.Fields);
-  a(0, 0, TerrainType.Fields);    a(1, 0, TerrainType.Pasture);
-  a(-1, -1, TerrainType.Pasture); a(0, -1, TerrainType.Forest);   a(1, -1, TerrainType.Forest);
-  a(-1, -2, TerrainType.Pasture); // Thrace north (Kırklareli)
-  a(0, -2, TerrainType.Forest);   // Istranca forests
-  a(1, -2, TerrainType.Pasture);  // Thrace NE
-  a(4, -2, TerrainType.Forest);   // Sinop coast
-  a(-2, 1, TerrainType.Pasture);  a(-1, 1, TerrainType.Hills);    a(0, 1, TerrainType.Pasture);
-
-  // === Marmara region (south shore) ===
-  a(1, 1, TerrainType.Fields);    a(2, 1, TerrainType.Fields);    a(3, 1, TerrainType.Pasture);
-
-  // === Aegean coast — rolling hills, olives, pasture ===
-  a(-2, 2, TerrainType.Hills);     a(-1, 2, TerrainType.Pasture);  a(0, 2, TerrainType.Hills);     a(1, 2, TerrainType.Pasture);
-  a(2, 2, TerrainType.Hills);
-
-  // === Western Anatolia (Eskişehir, Afyon, Burdur) ===
-  a(4, -1, TerrainType.Forest);   a(5, -1, TerrainType.Forest);
-  a(4, 0, TerrainType.Pasture);   a(5, 0, TerrainType.Pasture);
-  a(4, 1, TerrainType.Forest);    a(5, 1, TerrainType.Hills);
-  a(3, 2, TerrainType.Forest);    a(4, 2, TerrainType.Hills);
-
-  // === Black Sea coast — dense forests ===
-  a(5, -2, TerrainType.Forest);   a(6, -2, TerrainType.Forest);   a(7, -2, TerrainType.Forest);
-  a(6, -1, TerrainType.Forest);   a(7, -1, TerrainType.Forest);   a(8, -1, TerrainType.Forest);
-
-  // === Central Anatolia — arid steppe, salt lakes ===
-  a(6, 0, TerrainType.Desert);    a(7, 0, TerrainType.Desert);    a(8, 0, TerrainType.Fields);
-  a(6, 1, TerrainType.Desert);    a(7, 1, TerrainType.Pasture);
-
-  // === Mediterranean coast (Antalya, Mersin, Adana) — fertile, hilly ===
-  a(5, 2, TerrainType.Forest);    a(6, 2, TerrainType.Hills);     a(7, 2, TerrainType.Fields);
-  a(5, 3, TerrainType.Forest);    a(6, 3, TerrainType.Fields);    a(7, 3, TerrainType.Fields);
-
-  // === Cappadocia & central-east ===
-  a(8, -2, TerrainType.Hills);    a(9, -2, TerrainType.Mountains);
-  a(9, -1, TerrainType.Forest);
-  a(9, 0, TerrainType.Fields);    a(8, 1, TerrainType.Hills);     a(9, 1, TerrainType.Pasture);
-
-  // === Eastern Black Sea coast (Trabzon, Rize, Artvin) — wet forests ===
-  a(10, -2, TerrainType.Forest);  a(11, -2, TerrainType.Forest);
-  a(10, -1, TerrainType.Forest);  a(11, -1, TerrainType.Hills);
-
-  // === NE highlands (Erzurum, Kars, Ardahan, Artvin) — mountains & pasture ===
-  a(8, -3, TerrainType.Mountains);  // Giresun mountains
-  a(9, -3, TerrainType.Mountains);   a(10, -3, TerrainType.Mountains);
-  a(11, -3, TerrainType.Pasture);    a(12, -3, TerrainType.Mountains);
-  a(12, -4, TerrainType.Mountains);  a(13, -4, TerrainType.Mountains);  a(14, -4, TerrainType.Hills);  // Ağrı Dağı area
-
-  // === Eastern Anatolia (Elazığ, Bingöl, Tunceli, Van) ===
-  a(12, -2, TerrainType.Mountains);  a(13, -2, TerrainType.Hills);  a(14, -2, TerrainType.Mountains);
-  a(12, -1, TerrainType.Hills);      a(13, -1, TerrainType.Pasture); a(14, -1, TerrainType.Mountains);
-  a(10, 0, TerrainType.Hills);       a(11, 0, TerrainType.Mountains); a(12, 0, TerrainType.Mountains);
-  a(13, 0, TerrainType.Mountains);   // Van/Hakkari
-  a(14, 0, TerrainType.Mountains);   // Ağrı east
-  a(13, -3, TerrainType.Pasture);    // Iğdır (Ararat valley)
-
-  // === SE Turkey (Gaziantep, Şanlıurfa, Diyarbakır, Mardin, Şırnak, Hakkari) ===
-  a(8, 2, TerrainType.Desert);    a(9, 2, TerrainType.Desert);    a(10, 2, TerrainType.Fields);
-  a(11, 2, TerrainType.Desert);   a(12, 2, TerrainType.Hills);
-  a(10, 1, TerrainType.Fields);   a(11, 1, TerrainType.Pasture);  a(12, 1, TerrainType.Hills);
-  a(13, 1, TerrainType.Mountains);
-
-  // === Hatay + far SE ===
-  a(4, 3, TerrainType.Forest);     a(8, 3, TerrainType.Fields);    a(9, 3, TerrainType.Desert);    a(10, 3, TerrainType.Hills);
-  a(11, 3, TerrainType.Mountains); a(12, 3, TerrainType.Mountains);
-
-  const hexes: HexTile[] = hexCoords.map((coord) => ({
+  const hexes: HexTile[] = allTerrainHexes.map((coord, i) => ({
     coord,
-    terrain: terrainMap[`${coord.q},${coord.r}`] ?? TerrainType.Pasture,
+    terrain: terrainPool[i],
     numberToken: null as number | null,
   }));
 
   generateNumberTokens(hexes);
 
-  const waterHexes = generateWaterFrame(hexCoords);
-  const harbors = generateHarbors(hexCoords, waterHexes, 8);
+  // Force center hex and SW hex to have 6 or 8
+  const centerTile = hexes.find(h => h.coord.q === 0 && h.coord.r === 0)!;
+  const swTile = hexes.find(h => h.coord.q === -1 && h.coord.r === 1)!;
+  const specialTiles = [centerTile, swTile];
+
+  for (const tile of specialTiles) {
+    if (tile.numberToken !== 6 && tile.numberToken !== 8) {
+      const swapTarget = hexes.find(h =>
+        (h.numberToken === 6 || h.numberToken === 8) &&
+        !specialTiles.includes(h) &&
+        h.terrain !== TerrainType.Desert
+      );
+      if (swapTarget) {
+        const tmp = tile.numberToken;
+        tile.numberToken = swapTarget.numberToken;
+        swapTarget.numberToken = tmp;
+      }
+    }
+  }
+
+  const outerWater = generateWaterFrame(allTerrainHexes);
+  const waterHexes = [...outerWater, ...centerWaterHexes];
+
+  // Custom harbor placement: 2 harbors per island + 1 matching harbor on center hex's east side
+  const harborTypes = harborTypeDistribution(9); // 8 for islands + 1 for center
+  // Shuffle harbor types
+  for (let i = harborTypes.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [harborTypes[i], harborTypes[j]] = [harborTypes[j], harborTypes[i]];
+  }
+
+  const waterSet = new Set(waterHexes.map(w => `${w.q},${w.r}`));
+  const harboredTerrain = new Set<string>();
+  // Don't place island harbors adjacent to SW or desert hex
+  const excludeSet = new Set([
+    `${swHex.q},${swHex.r}`,
+    `${desertHex.q},${desertHex.r}`,
+  ]);
+
+  const harbors: Harbor[] = [];
+  let typeIdx = 0;
+
+  // Place matching harbor on the east side of center hex (0,0)
+  // E neighbor of (0,0) is (1,0) — should be a water hex
+  const centerEastWater: HexCoord = { q: 1, r: 0 };
+  const centerResource = TERRAIN_RESOURCE[centerTile.terrain];
+  const terrainToHarbor: Record<string, HarborType> = {
+    brick: HarborType.Brick, lumber: HarborType.Lumber, ore: HarborType.Ore,
+    grain: HarborType.Grain, wool: HarborType.Wool,
+  };
+  const matchingHarborType = centerResource ? (terrainToHarbor[centerResource] || HarborType.Generic) : HarborType.Generic;
+  {
+    const facing = directionFromTo(centerEastWater, centerHex);
+    const vertices = harborVertices(centerEastWater, centerHex);
+    harbors.push({
+      type: matchingHarborType,
+      vertices,
+      position: centerEastWater,
+      facing,
+    });
+    harboredTerrain.add(`${centerHex.q},${centerHex.r}`);
+  }
+  // Remove the matching type from the shuffled pool so we don't duplicate
+  const matchIdx = harborTypes.findIndex(t => t === matchingHarborType);
+  if (matchIdx !== -1) harborTypes.splice(matchIdx, 1);
+
+  for (const island of islands) {
+    let placed = 0;
+    const islandHexes = [island.center, ...island.neighborIndices.map(idx => hexNeighbors(island.center)[idx])];
+
+    // Find water hexes adjacent to this island's terrain
+    const islandTerrainSet = new Set(islandHexes.map(h => `${h.q},${h.r}`));
+    const islandWater = waterHexes.filter(w =>
+      hexNeighbors(w).some(n => islandTerrainSet.has(`${n.q},${n.r}`))
+    );
+
+    // Sort for even distribution
+    islandWater.sort((a, b) => {
+      const angleA = Math.atan2(a.r + a.q * 0.5, a.q * Math.sqrt(3) * 0.5);
+      const angleB = Math.atan2(b.r + b.q * 0.5, b.q * Math.sqrt(3) * 0.5);
+      return angleA - angleB;
+    });
+
+    const step = Math.max(1, Math.floor(islandWater.length / 2));
+    for (let idx = 0; idx < islandWater.length && placed < 2; idx++) {
+      if (placed === 0 && idx % step !== 0) continue;
+      if (placed === 1 && idx % step !== Math.floor(step / 2)) continue;
+
+      const wh = islandWater[idx];
+      const adjTerrain = hexNeighbors(wh).filter(n => islandTerrainSet.has(`${n.q},${n.r}`));
+      // Skip if connects to excluded hexes or already harbored terrain
+      const validAdj = adjTerrain.filter(n =>
+        !excludeSet.has(`${n.q},${n.r}`) && !harboredTerrain.has(`${n.q},${n.r}`)
+      );
+      if (validAdj.length === 0) continue;
+
+      const landHex = validAdj[0];
+      const facing = directionFromTo(wh, landHex);
+      const vertices = harborVertices(wh, landHex);
+
+      for (const t of adjTerrain) harboredTerrain.add(`${t.q},${t.r}`);
+
+      harbors.push({
+        type: harborTypes[typeIdx++] || HarborType.Generic,
+        vertices,
+        position: wh,
+        facing,
+      });
+      placed++;
+    }
+
+    // Fallback: if couldn't place 2, try any remaining water hex for this island
+    if (placed < 2) {
+      for (const wh of islandWater) {
+        if (placed >= 2) break;
+        if (harbors.some(h => h.position.q === wh.q && h.position.r === wh.r)) continue;
+        const adjTerrain = hexNeighbors(wh).filter(n => islandTerrainSet.has(`${n.q},${n.r}`));
+        const validAdj = adjTerrain.filter(n =>
+          !excludeSet.has(`${n.q},${n.r}`) && !harboredTerrain.has(`${n.q},${n.r}`)
+        );
+        if (validAdj.length === 0) continue;
+
+        const landHex = validAdj[0];
+        const facing = directionFromTo(wh, landHex);
+        const vertices = harborVertices(wh, landHex);
+        for (const t of adjTerrain) harboredTerrain.add(`${t.q},${t.r}`);
+
+        harbors.push({
+          type: harborTypes[typeIdx++] || HarborType.Generic,
+          vertices,
+          position: wh,
+          facing,
+        });
+        placed++;
+      }
+    }
+  }
 
   return {
     hexes,
@@ -477,161 +492,8 @@ function generateWorldBoard(): Board {
 // Terrain assignment
 // ---------------------------------------------------------------------------
 
-export function generateTerrainAssignment(hexCount: number, mapType: MapType): TerrainType[] {
-  if (mapType === MapType.Random || mapType === MapType.Standard) {
-    return shuffledTerrainList(hexCount);
-  }
-  return presetTerrainAssignment(hexCount, mapType);
-}
-
-/**
- * For preset map types, assign ALL terrain deliberately based on ring position.
- * For 19-hex boards (4-player):
- *   Ring 0: 1 hex (center)
- *   Ring 1: 6 hexes (inner ring)
- *   Ring 2: 12 hexes (outer ring)
- * Terrain counts: 3 hills, 4 forest, 3 mountains, 4 fields, 4 pasture, 1 desert
- */
-function presetTerrainAssignment(hexCount: number, mapType: MapType): TerrainType[] {
-  const counts = getTerrainCountsFromHexCount(hexCount);
-  const terrains = new Array<TerrainType | null>(hexCount).fill(null);
-
-  const ringOf = buildRingMap(hexCount);
-  const maxRing = Math.max(...ringOf);
-
-  // Indices grouped by ring
-  const byRing: number[][] = [];
-  for (let ring = 0; ring <= maxRing; ring++) {
-    byRing.push(ringOf.map((r, i) => r === ring ? i : -1).filter(i => i >= 0));
-  }
-
-  const centerIndices = byRing[0] ?? [];
-  const ring1 = byRing[1] ?? [];
-  const ring2 = byRing[2] ?? [];
-  const outerRing = byRing[byRing.length - 1] ?? [];
-  const innerRings = byRing.slice(0, -1).flat();
-  const midRing = byRing.length > 2 ? byRing[1] : [];
-
-  switch (mapType) {
-    case MapType.Pangaea:
-      // All productive terrain packed into center+ring1, desert+pasture on edges
-      placeTerrainAt(terrains, centerIndices, TerrainType.Mountains, counts);
-      placeTerrainAt(terrains, ring1, TerrainType.Fields, counts);
-      placeTerrainAt(terrains, ring1, TerrainType.Mountains, counts);
-      placeTerrainAt(terrains, ring1, TerrainType.Forest, counts);
-      placeTerrainAt(terrains, ring1, TerrainType.Hills, counts);
-      // Push desert and remaining pasture/hills to outer ring
-      placeTerrainAt(terrains, outerRing, TerrainType.Desert, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Pasture, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Hills, counts);
-      break;
-
-    case MapType.Archipelago:
-      // Desert+pasture in center, valuable resources spread to outer ring
-      placeTerrainAt(terrains, centerIndices, TerrainType.Desert, counts);
-      placeTerrainAt(terrains, ring1, TerrainType.Pasture, counts);
-      placeTerrainAt(terrains, ring1, TerrainType.Hills, counts);
-      // Outer ring gets the good stuff
-      placeTerrainAt(terrains, outerRing, TerrainType.Fields, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Mountains, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Forest, counts);
-      break;
-
-    case MapType.RichCoast:
-      // Mountains+Fields exclusively on outer ring, forest+pasture inside
-      placeTerrainAt(terrains, outerRing, TerrainType.Mountains, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Fields, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Hills, counts);
-      placeTerrainAt(terrains, centerIndices, TerrainType.Forest, counts);
-      placeTerrainAt(terrains, innerRings, TerrainType.Pasture, counts);
-      placeTerrainAt(terrains, innerRings, TerrainType.Forest, counts);
-      placeTerrainAt(terrains, innerRings, TerrainType.Desert, counts);
-      break;
-
-    case MapType.DesertRing:
-      // Center has fields+mountains, ring1 is ALL desert+pasture, outer has forest+hills
-      placeTerrainAt(terrains, centerIndices, TerrainType.Fields, counts);
-      placeTerrainAt(terrains, midRing, TerrainType.Desert, counts);
-      placeTerrainAt(terrains, midRing, TerrainType.Pasture, counts);
-      placeTerrainAt(terrains, midRing, TerrainType.Hills, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Forest, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Mountains, counts);
-      placeTerrainAt(terrains, outerRing, TerrainType.Fields, counts);
-      break;
-  }
-
-  // Fill any remaining slots randomly
-  fillRemaining(terrains, counts);
-  return terrains as TerrainType[];
-}
-
-/** Place as many of `terrain` type as available into preferred indices. */
-function placeTerrainAt(
-  terrains: (TerrainType | null)[],
-  preferredIndices: number[],
-  terrain: TerrainType,
-  counts: Record<TerrainType, number>,
-): void {
-  const shuffled = [...preferredIndices].sort(() => Math.random() - 0.5);
-  for (const idx of shuffled) {
-    if (counts[terrain] <= 0) break;
-    if (terrains[idx] !== null) continue;
-    terrains[idx] = terrain;
-    counts[terrain]--;
-  }
-}
-
-/** Fill all remaining null slots from whatever terrain counts are left. */
-function fillRemaining(terrains: (TerrainType | null)[], counts: Record<TerrainType, number>): void {
-  const pool: TerrainType[] = [];
-  for (const [t, c] of Object.entries(counts)) {
-    for (let i = 0; i < c; i++) pool.push(t as TerrainType);
-  }
-  // Shuffle the pool
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  let pi = 0;
-  for (let i = 0; i < terrains.length; i++) {
-    if (terrains[i] === null && pi < pool.length) {
-      terrains[i] = pool[pi++];
-    }
-  }
-}
-
-/** Build ring-distance array matching hex indices from generateHexGrid ordering. */
-function buildRingMap(hexCount: number): number[] {
-  // Reconstruct hex positions — generateHexGrid iterates q then r within radius
-  const radius = hexCount <= 19 ? 2 : hexCount <= 30 ? 3 : 4;
-  const hexes: { q: number; r: number }[] = [];
-  for (let q = -radius; q <= radius; q++) {
-    for (let r = -radius; r <= radius; r++) {
-      const s = -q - r;
-      if (Math.abs(s) <= radius) {
-        hexes.push({ q, r });
-      }
-    }
-  }
-  // Apply same trimming as board-layout
-  let trimmed = hexes;
-  if (radius === 3 && hexes.length > 30) {
-    trimmed = trimToCountLocal(hexes, 30);
-  } else if (radius === 4 && hexes.length > 42) {
-    trimmed = trimToCountLocal(hexes, 42);
-  }
-  return trimmed.slice(0, hexCount).map(h => Math.max(Math.abs(h.q), Math.abs(h.r), Math.abs(-h.q - h.r)));
-}
-
-function trimToCountLocal(hexes: { q: number; r: number }[], target: number): { q: number; r: number }[] {
-  if (hexes.length <= target) return hexes;
-  const scored = hexes.map(h => ({
-    hex: h,
-    dist: Math.max(Math.abs(h.q), Math.abs(h.r), Math.abs(-h.q - h.r)),
-    cornerScore: Math.abs(h.q) + Math.abs(h.r) + Math.abs(-h.q - h.r),
-  }));
-  scored.sort((a, b) => b.dist - a.dist || b.cornerScore - a.cornerScore);
-  return scored.slice(scored.length - target).map(s => s.hex);
+export function generateTerrainAssignment(hexCount: number, _mapType: MapType): TerrainType[] {
+  return shuffledTerrainList(hexCount);
 }
 
 function shuffledTerrainList(hexCount: number): TerrainType[] {
@@ -682,15 +544,114 @@ function getTerrainCountsFromHexCount(hexCount: number): Record<TerrainType, num
       [TerrainType.Desert]: 2,
     };
   }
-  // 42 hexes
-  return {
-    [TerrainType.Hills]: 7,
-    [TerrainType.Forest]: 8,
-    [TerrainType.Mountains]: 7,
-    [TerrainType.Fields]: 8,
-    [TerrainType.Pasture]: 8,
-    [TerrainType.Desert]: 4,
-  };
+  if (hexCount <= 42) {
+    return {
+      [TerrainType.Hills]: 7,
+      [TerrainType.Forest]: 8,
+      [TerrainType.Mountains]: 7,
+      [TerrainType.Fields]: 8,
+      [TerrainType.Pasture]: 8,
+      [TerrainType.Desert]: 4,
+    };
+  }
+  // Arbitrary count: scale proportionally from base ratios
+  return getScaledTerrainCounts(hexCount);
+}
+
+/** Scale terrain distribution proportionally for arbitrary hex counts. */
+function getScaledTerrainCounts(hexCount: number): Record<TerrainType, number> {
+  // Base ratios from 4-player (19 hexes): hills=3, forest=4, mountains=3, fields=4, pasture=4, desert=1
+  const deserts = Math.max(1, Math.round(hexCount / 19));
+  const resourceCount = hexCount - deserts;
+  const perType = Math.floor(resourceCount / 5);
+  const remainder = resourceCount - perType * 5;
+  // Distribute remainder to types in order of base priority (forest, fields, pasture first)
+  const types = [TerrainType.Forest, TerrainType.Fields, TerrainType.Pasture, TerrainType.Hills, TerrainType.Mountains];
+  const counts: Record<string, number> = {};
+  for (let i = 0; i < types.length; i++) {
+    counts[types[i]] = perType + (i < remainder ? 1 : 0);
+  }
+  counts[TerrainType.Desert] = deserts;
+  return counts as Record<TerrainType, number>;
+}
+
+// ---------------------------------------------------------------------------
+// Custom procedural board generation
+// ---------------------------------------------------------------------------
+
+function generateCustomBoard(config: CustomMapConfig): Board {
+  // tileCount = total canvas size (solid shape). Ratios split it into resource/desert/water.
+  const canvasTiles = config.tileCount;
+  const rr = config.resourceRatio ?? 95;
+  const dr = config.desertRatio ?? 5;
+  const wr = config.waterRatio ?? (100 - rr - dr);
+  const total = rr + dr + wr;
+  const waterCount = total > 0 ? Math.max(0, Math.round(canvasTiles * wr / total)) : 0;
+  const desertCount = total > 0 ? Math.max(0, Math.round(canvasTiles * dr / total)) : 0;
+
+  // Generate the full solid canvas
+  const allPositions = canvasTiles > 0
+    ? generateProceduralGrid(canvasTiles, config.shape, config.seed)
+    : [];
+
+  // Use a seeded RNG to shuffle positions, then assign water/desert/resource
+  const numericSeed = config.seed ? hashSeed(config.seed) : canvasTiles * 31337;
+  const rng = mulberry32(numericSeed);
+  const indices = allPositions.map((_, i) => i);
+  // Fisher-Yates shuffle with seeded RNG
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  // First `waterCount` shuffled indices become water, next `desertCount` become desert, rest resource
+  const tileType = new Map<number, 'water' | 'desert' | 'resource'>();
+  for (let i = 0; i < indices.length; i++) {
+    if (i < waterCount) {
+      tileType.set(indices[i], 'water');
+    } else if (i < waterCount + desertCount) {
+      tileType.set(indices[i], 'desert');
+    } else {
+      tileType.set(indices[i], 'resource');
+    }
+  }
+
+  const landPositions: HexCoord[] = [];
+  const internalWater: HexCoord[] = [];
+  const terrainTypes: TerrainType[] = [];
+
+  for (let i = 0; i < allPositions.length; i++) {
+    const type = tileType.get(i)!;
+    if (type === 'water') {
+      internalWater.push(allPositions[i]);
+    } else {
+      landPositions.push(allPositions[i]);
+      terrainTypes.push(type === 'desert' ? TerrainType.Desert : TerrainType.Pasture); // placeholder
+    }
+  }
+
+  // Build proper terrain pool for land tiles (evenly split resources + exact desert count)
+  const actualDeserts = terrainTypes.filter(t => t === TerrainType.Desert).length;
+  const pool = generateRatioTerrainPool(landPositions.length, actualDeserts);
+  const hexes: HexTile[] = landPositions.map((coord, i) => ({
+    coord,
+    terrain: pool[i],
+    numberToken: null,
+  }));
+  generateNumberTokens(hexes);
+
+  // Water = single-tile border around the shape + internal water tiles
+  const landSet = new Set(landPositions.map(h => `${h.q},${h.r}`));
+  const borderWater = generateWaterFrame(allPositions);
+  const waterHexes = [...borderWater, ...internalWater];
+
+  // Scale harbor count based on land-adjacent water
+  const frameWater = borderWater.filter(w =>
+    hexNeighbors(w).some(n => landSet.has(`${n.q},${n.r}`)),
+  );
+  const harborCount = Math.max(5, Math.round(frameWater.length / 3));
+  const harbors = generateHarborsN(landPositions, waterHexes, harborCount);
+  return { hexes, waterHexes, harbors, vertexBuildings: new Map(), edgeBuildings: new Map() };
 }
 
 // ---------------------------------------------------------------------------
@@ -723,7 +684,9 @@ function getTokenDistributionForCount(producingCount: number): number[] {
 function desertCount(hexCount: number): number {
   if (hexCount <= 19) return 1;
   if (hexCount <= 30) return 2;
-  return 4;
+  if (hexCount <= 42) return 4;
+  // Scale: ~1 desert per 10–12 hexes, minimum 1
+  return Math.max(1, Math.round(hexCount / 11));
 }
 
 export function generateNumberTokens(hexes: HexTile[]): void {
@@ -736,10 +699,10 @@ export function generateNumberTokens(hexes: HexTile[]): void {
     [tokens[i], tokens[j]] = [tokens[j], tokens[i]];
   }
 
-  // Try to place with no adjacent 6/8; retry up to 100 times
+  // Try to place with balanced probability; retry up to 100 times
   for (let attempt = 0; attempt < 100; attempt++) {
     assignTokens(producingHexes, tokens);
-    if (!hasAdjacentHighValue(producingHexes)) return;
+    if (!hasProbabilityViolation(hexes)) return;
 
     // Reshuffle
     for (let i = tokens.length - 1; i > 0; i--) {
@@ -757,22 +720,109 @@ function assignTokens(hexes: HexTile[], tokens: number[]): void {
   }
 }
 
-function hasAdjacentHighValue(hexes: HexTile[]): boolean {
-  const highValue = new Set<string>();
-  for (const h of hexes) {
-    if (h.numberToken === 6 || h.numberToken === 8) {
-      highValue.add(`${h.coord.q},${h.coord.r}`);
-    }
-  }
+/** Probability dots for each number token (how many ways to roll it with 2d6). */
+function probabilityDots(n: number | null): number {
+  if (n == null) return 0;
+  return 6 - Math.abs(n - 7); // 2→1, 3→2, 4→3, 5→4, 6→5, 8→5, 9→4, 10→3, 11→2, 12→1
+}
+
+/** Max allowed probability dots at any single vertex (sum of up to 3 adjacent hex dots). */
+const MAX_VERTEX_DOTS = 12; // blocks triples like (6,6,8)=15, (5,6,8)=14, (6,8,5)=14
+/** Min allowed probability dots at a vertex with 3 producing hexes. */
+const MIN_VERTEX_DOTS = 4;  // blocks triples like (2,12,2)=3, (2,12,3)=4 is ok
+
+/**
+ * Check for probability violations:
+ * 1. No two adjacent 6/8 hexes
+ * 2. No vertex with extreme combined probability
+ */
+function hasProbabilityViolation(hexes: HexTile[]): boolean {
+  const hexMap = new Map<string, HexTile>();
+  for (const h of hexes) hexMap.set(`${h.coord.q},${h.coord.r}`, h);
+
+  // Check 1: no adjacent 6/8
   for (const h of hexes) {
     if (h.numberToken !== 6 && h.numberToken !== 8) continue;
     for (const n of hexNeighbors(h.coord)) {
-      if (highValue.has(`${n.q},${n.r}`) && !hexEquals(n, h.coord)) {
+      const neighbor = hexMap.get(`${n.q},${n.r}`);
+      if (neighbor && (neighbor.numberToken === 6 || neighbor.numberToken === 8)) {
         return true;
       }
     }
   }
+
+  // Check 2: vertex probability balance
+  // Each vertex is shared by up to 3 hexes. We check N and S vertices per hex.
+  const checkedVertices = new Set<string>();
+  for (const h of hexes) {
+    for (const dir of [VertexDirection.N, VertexDirection.S]) {
+      // Adjacent hexes for this vertex
+      const adjCoords = dir === VertexDirection.N
+        ? [h.coord, { q: h.coord.q, r: h.coord.r - 1 }, { q: h.coord.q + 1, r: h.coord.r - 1 }]
+        : [h.coord, { q: h.coord.q, r: h.coord.r + 1 }, { q: h.coord.q - 1, r: h.coord.r + 1 }];
+
+      // Canonical key for deduplication
+      const sortedKeys = adjCoords.map(c => `${c.q},${c.r}`).sort();
+      const vertexKey = sortedKeys.join('|');
+      if (checkedVertices.has(vertexKey)) continue;
+      checkedVertices.add(vertexKey);
+
+      const adjHexes = adjCoords.map(c => hexMap.get(`${c.q},${c.r}`)).filter(Boolean) as HexTile[];
+      const producingAdj = adjHexes.filter(ah => ah.numberToken != null);
+      if (producingAdj.length < 2) continue; // single or no hex vertices can't be extreme
+
+      const totalDots = producingAdj.reduce((sum, ah) => sum + probabilityDots(ah.numberToken), 0);
+
+      if (totalDots > MAX_VERTEX_DOTS) return true;
+      if (producingAdj.length >= 3 && totalDots < MIN_VERTEX_DOTS) return true;
+    }
+  }
+
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Vanity water hex selection
+// ---------------------------------------------------------------------------
+
+/** Pick up to 3 water hexes for vanity sprites. Prefer hexes with the most water neighbors (fewest terrain neighbors). */
+function pickVanityWaterHexes(
+  waterHexes: HexCoord[],
+  terrainHexes: HexCoord[],
+): Array<{ coord: HexCoord; variant: number }> {
+  const terrainSet = new Set(terrainHexes.map(h => `${h.q},${h.r}`));
+  const waterSet = new Set(waterHexes.map(h => `${h.q},${h.r}`));
+
+  // Score each water hex by how many water neighbors it has (higher = more "open water")
+  const scored = waterHexes.map(w => {
+    const neighbors = hexNeighbors(w);
+    const waterNeighborCount = neighbors.filter(n => waterSet.has(`${n.q},${n.r}`)).length;
+    const terrainNeighborCount = neighbors.filter(n => terrainSet.has(`${n.q},${n.r}`)).length;
+    return { coord: w, score: waterNeighborCount - terrainNeighborCount };
+  });
+
+  // Sort by score descending, then shuffle within same score for variety
+  scored.sort((a, b) => b.score - a.score || (Math.random() - 0.5));
+
+  // Pick top 3, ensuring they're not adjacent to each other
+  const picked = new Set<string>();
+  const result: Array<{ coord: HexCoord; variant: number }> = [];
+  const variants = [1, 2, 3];
+  for (let i = variants.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [variants[i], variants[j]] = [variants[j], variants[i]];
+  }
+
+  for (const candidate of scored) {
+    if (result.length >= 3) break;
+    const key = `${candidate.coord.q},${candidate.coord.r}`;
+    // Don't place adjacent to another vanity hex
+    if (hexNeighbors(candidate.coord).some(n => picked.has(`${n.q},${n.r}`))) continue;
+    picked.add(key);
+    result.push({ coord: candidate.coord, variant: variants[result.length] });
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -811,24 +861,49 @@ export function generateHarbors(
     return angleA - angleB;
   });
 
-  for (let i = 0; i < harborCount && i * step < edgeWater.length; i++) {
-    const waterHex = edgeWater[i * step];
-    const adjacentTerrain = hexNeighbors(waterHex).filter((n) =>
-      terrainSet.has(`${n.q},${n.r}`),
-    );
+  // Track which terrain hexes already have a harbor adjacent
+  const harboredTerrainHexes = new Set<string>();
+  const usedWaterHexes = new Set<string>();
 
-    if (adjacentTerrain.length === 0) continue;
+  // Greedy placement: iterate edge water with spacing, skip if all adjacent terrain already harbored
+  let placed = 0;
+  for (let pass = 0; pass < 2 && placed < harborCount; pass++) {
+    // First pass: use step spacing. Second pass: fill remaining from unused water hexes.
+    for (let idx = 0; idx < edgeWater.length && placed < harborCount; idx++) {
+      if (pass === 0 && idx % step !== 0) continue;
+      const waterHex = edgeWater[idx];
+      const wKey = `${waterHex.q},${waterHex.r}`;
+      if (usedWaterHexes.has(wKey)) continue;
 
-    const landHex = adjacentTerrain[0];
-    const facing = directionFromTo(waterHex, landHex);
-    const vertices = harborVertices(waterHex, landHex);
+      const adjacentTerrain = hexNeighbors(waterHex).filter((n) =>
+        terrainSet.has(`${n.q},${n.r}`),
+      );
+      if (adjacentTerrain.length === 0) continue;
 
-    harbors.push({
-      type: types[i],
-      vertices,
-      position: waterHex,
-      facing,
-    });
+      // Skip if all adjacent terrain hexes are already harbored
+      if (adjacentTerrain.every(h => harboredTerrainHexes.has(`${h.q},${h.r}`))) continue;
+
+      // Pick first adjacent terrain hex that doesn't already have a harbor
+      const landHex = adjacentTerrain.find(h => !harboredTerrainHexes.has(`${h.q},${h.r}`))
+        ?? adjacentTerrain[0];
+
+      const facing = directionFromTo(waterHex, landHex);
+      const vertices = harborVertices(waterHex, landHex);
+
+      // Mark adjacent terrain hexes as harbored
+      for (const t of adjacentTerrain) {
+        harboredTerrainHexes.add(`${t.q},${t.r}`);
+      }
+      usedWaterHexes.add(wKey);
+
+      harbors.push({
+        type: types[placed],
+        vertices,
+        position: waterHex,
+        facing,
+      });
+      placed++;
+    }
   }
 
   return harbors;
@@ -869,45 +944,56 @@ function directionFromTo(from: HexCoord, to: HexCoord): number {
 }
 
 function harborVertices(waterHex: HexCoord, landHex: HexCoord): [VertexId, VertexId] {
-  // The two vertices on the shared edge between waterHex and landHex.
-  // Direction is from waterHex toward landHex.
-  const dir = directionFromTo(waterHex, landHex);
-  const w = waterHex;
-  const l = landHex;
+  // Find the two corners of the water hex that border the land hex.
+  // Express them using the SAME hex references the Board component uses for rendering:
+  // N@(hex) and S@(hex) where hex is a terrain or water hex.
+  // This ensures vertexToPixel gives positions matching the settlement dots.
+  const wq = waterHex.q, wr = waterHex.r;
 
-  const vertexPairs: Record<number, [VertexId, VertexId]> = {
-    // dir 0: land is E of water. Shared edge = E@water.
-    0: [
-      { hex: { q: w.q + 1, r: w.r - 1 }, direction: VertexDirection.S },
-      { hex: { q: w.q, r: w.r + 1 }, direction: VertexDirection.N },
-    ],
-    // dir 1: land is SE of water. Shared edge = SE@water.
-    1: [
-      { hex: { q: w.q, r: w.r + 1 }, direction: VertexDirection.N },
-      { hex: { q: w.q, r: w.r }, direction: VertexDirection.S },
-    ],
-    // dir 2: land is SW of water. Shared edge = NE@land.
-    2: [
-      { hex: { q: l.q, r: l.r }, direction: VertexDirection.N },
-      { hex: { q: l.q + 1, r: l.r - 1 }, direction: VertexDirection.S },
-    ],
-    // dir 3: land is W of water. Shared edge = E@land.
-    3: [
-      { hex: { q: l.q + 1, r: l.r - 1 }, direction: VertexDirection.S },
-      { hex: { q: l.q, r: l.r + 1 }, direction: VertexDirection.N },
-    ],
-    // dir 4: land is NW of water. Shared edge = SE@land.
-    4: [
-      { hex: { q: l.q, r: l.r + 1 }, direction: VertexDirection.N },
-      { hex: { q: l.q, r: l.r }, direction: VertexDirection.S },
-    ],
-    // dir 5: land is NE of water. Shared edge = NE@water.
-    5: [
-      { hex: { q: w.q, r: w.r }, direction: VertexDirection.N },
-      { hex: { q: w.q + 1, r: w.r - 1 }, direction: VertexDirection.S },
-    ],
-  };
-  return vertexPairs[dir] ?? vertexPairs[0];
+  // All 6 corners of the water hex, expressed as N/S of the water hex or its neighbors.
+  // Use the water hex itself for corners 0 (N@water) and 3 (S@water).
+  // For corners 1,2,4,5, use the neighbor hex that the Board would iterate through.
+  const waterCorners: Array<{ v: VertexId; adjHexes: HexCoord[] }> = [
+    { // Corner 0 (top)
+      v: { hex: waterHex, direction: VertexDirection.N },
+      adjHexes: [{ q: wq, r: wr }, { q: wq, r: wr - 1 }, { q: wq + 1, r: wr - 1 }],
+    },
+    { // Corner 1 (upper-right) — S of NE neighbor
+      v: { hex: { q: wq + 1, r: wr - 1 }, direction: VertexDirection.S },
+      adjHexes: [{ q: wq + 1, r: wr - 1 }, { q: wq + 1, r: wr }, { q: wq, r: wr }],
+    },
+    { // Corner 2 (lower-right) — N of SE neighbor
+      v: { hex: { q: wq, r: wr + 1 }, direction: VertexDirection.N },
+      adjHexes: [{ q: wq, r: wr + 1 }, { q: wq, r: wr }, { q: wq + 1, r: wr }],
+    },
+    { // Corner 3 (bottom)
+      v: { hex: waterHex, direction: VertexDirection.S },
+      adjHexes: [{ q: wq, r: wr }, { q: wq, r: wr + 1 }, { q: wq - 1, r: wr + 1 }],
+    },
+    { // Corner 4 (lower-left) — N of SW neighbor
+      v: { hex: { q: wq - 1, r: wr + 1 }, direction: VertexDirection.N },
+      adjHexes: [{ q: wq - 1, r: wr + 1 }, { q: wq - 1, r: wr }, { q: wq, r: wr }],
+    },
+    { // Corner 5 (upper-left) — S of NW neighbor
+      v: { hex: { q: wq, r: wr - 1 }, direction: VertexDirection.S },
+      adjHexes: [{ q: wq, r: wr - 1 }, { q: wq, r: wr }, { q: wq - 1, r: wr }],
+    },
+  ];
+
+  // Find the 2 adjacent corners that both border the land hex
+  // Adjacent corner pairs: (0,1), (1,2), (2,3), (3,4), (4,5), (5,0)
+  const ADJACENT_PAIRS: [number, number][] = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]];
+
+  for (const [a, b] of ADJACENT_PAIRS) {
+    const aAdj = waterCorners[a].adjHexes.some(h => h.q === landHex.q && h.r === landHex.r);
+    const bAdj = waterCorners[b].adjHexes.some(h => h.q === landHex.q && h.r === landHex.r);
+    if (aAdj && bAdj) {
+      return [waterCorners[a].v, waterCorners[b].v];
+    }
+  }
+
+  // Fallback (should not happen)
+  return [waterCorners[0].v, waterCorners[1].v];
 }
 
 // ---------------------------------------------------------------------------
@@ -930,8 +1016,8 @@ function generatePresetBoard(coords: HexCoord[], harborCount: number): Board {
 
 function generateTerrainPool(count: number): TerrainType[] {
   // 1 desert per ~19 hexes, rest evenly split across 5 resource types
-  const desertCount = Math.max(1, Math.floor(count / 19));
-  const resourceCount = count - desertCount;
+  const deserts = Math.max(1, Math.floor(count / 19));
+  const resourceCount = count - deserts;
   const perType = Math.floor(resourceCount / 5);
   const remainder = resourceCount - perType * 5;
   const types = [TerrainType.Hills, TerrainType.Forest, TerrainType.Mountains, TerrainType.Fields, TerrainType.Pasture];
@@ -940,7 +1026,30 @@ function generateTerrainPool(count: number): TerrainType[] {
     const extra = t < remainder ? 1 : 0;
     for (let i = 0; i < perType + extra; i++) pool.push(types[t]);
   }
-  for (let i = 0; i < desertCount; i++) pool.push(TerrainType.Desert);
+  for (let i = 0; i < deserts; i++) pool.push(TerrainType.Desert);
+  // Fisher-Yates shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
+
+/**
+ * Generate a terrain pool with a specific desert count and the rest as evenly-split resources.
+ */
+function generateRatioTerrainPool(landCount: number, desertCount: number): TerrainType[] {
+  const clampedDeserts = Math.max(0, Math.min(landCount, desertCount));
+  const resourceCount = landCount - clampedDeserts;
+  const types = [TerrainType.Hills, TerrainType.Forest, TerrainType.Mountains, TerrainType.Fields, TerrainType.Pasture];
+  const perType = Math.floor(resourceCount / 5);
+  const remainder = resourceCount - perType * 5;
+  const pool: TerrainType[] = [];
+  for (let t = 0; t < 5; t++) {
+    const extra = t < remainder ? 1 : 0;
+    for (let i = 0; i < perType + extra; i++) pool.push(types[t]);
+  }
+  for (let i = 0; i < clampedDeserts; i++) pool.push(TerrainType.Desert);
   // Fisher-Yates shuffle
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -992,32 +1101,14 @@ function generateHarborsN(terrain: HexCoord[], water: HexCoord[], count: number)
     const landNeighbor = neighbors.find(n => terrainSet.has(`${n.q},${n.r}`));
     if (!landNeighbor) continue;
 
-    const dx = landNeighbor.q - wh.q;
-    const dr = landNeighbor.r - wh.r;
-    let facing = 0;
-    const dirs = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
-    for (let d = 0; d < 6; d++) {
-      if (dirs[d][0] === dx && dirs[d][1] === dr) { facing = d; break; }
-    }
-
-    const vertexDirPairs: [VertexDirection, VertexDirection][] = [
-      [VertexDirection.N, VertexDirection.S],
-      [VertexDirection.N, VertexDirection.S],
-      [VertexDirection.N, VertexDirection.S],
-      [VertexDirection.N, VertexDirection.S],
-      [VertexDirection.N, VertexDirection.S],
-      [VertexDirection.N, VertexDirection.S],
-    ];
-    const verts = vertexDirPairs[facing];
+    const facing = directionFromTo(wh, landNeighbor);
+    const vertices = harborVertices(wh, landNeighbor);
 
     harbors.push({
       type: harborTypes[i],
       position: wh,
       facing,
-      vertices: [
-        { hex: landNeighbor, direction: verts[0] },
-        { hex: landNeighbor, direction: verts[1] },
-      ],
+      vertices,
     });
   }
 

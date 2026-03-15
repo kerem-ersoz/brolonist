@@ -29,6 +29,7 @@ interface GameLobby {
     mapType: string;
     turnTimerSeconds: number;
     isPrivate: boolean;
+    customMapConfig?: { tileCount: number; shape: string; seed?: string; resourceRatio?: number; desertRatio?: number; waterRatio?: number };
   };
 }
 

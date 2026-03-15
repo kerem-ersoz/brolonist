@@ -75,6 +75,7 @@ import {
   subtractResources,
   addResources,
   vertexAdjacentEdges,
+  canonicalVertex,
   TERRAIN_RESOURCE,
 } from '@brolonist/shared';
 
@@ -352,6 +353,8 @@ const PLAYER_COLORS: PlayerColor[] = [
   PlayerColor.Brown,
   PlayerColor.Purple,
   PlayerColor.Teal,
+  PlayerColor.Pink,
+  PlayerColor.Black,
 ];
 
 // ---------------------------------------------------------------------------
@@ -371,7 +374,7 @@ export function initializeGame(
   players: PlayerInit[],
   config: GameConfig,
 ): GameState {
-  const board = generateBoard({ playerCount: players.length, mapType: config.mapType });
+  const board = generateBoard({ playerCount: players.length, mapType: config.mapType, customMapConfig: config.customMapConfig });
 
   const gamePlayers: Player[] = players.map((p, i) =>
     createPlayer(p.id, p.name, (p.color as PlayerColor) || PLAYER_COLORS[i % PLAYER_COLORS.length], p.isBot, p.botStrategy),
@@ -529,9 +532,16 @@ export function handlePlaceSettlement(
     if (state.setupAction !== 'settlement') return sendError(playerId, 'You need to place a road first');
     const error = handleSetupSettlement(state, playerId, payload.vertex);
     if (error) return sendError(playerId, error);
-    distributeInitialResources(state, playerId, payload.vertex);
+    const initialResources = distributeInitialResources(state, playerId, payload.vertex);
     state.setupAction = 'road';
     addLogEntry(state, { type: 'place_settlement', message: 'Settlement placed (setup)', playerId });
+    if (initialResources) {
+      const parts: string[] = [];
+      for (const [res, count] of Object.entries(initialResources)) {
+        if (count > 0) parts.push(`${count} ${res}`);
+      }
+      addLogEntry(state, { type: 'distribute', message: `received ${parts.join(', ')}`, playerId, data: { resources: initialResources } });
+    }
   } else {
     if (state.currentPhase !== GamePhase.TradeAndBuild && state.currentPhase !== GamePhase.SpecialBuild) {
       return sendError(playerId, 'Cannot build in this phase');
@@ -551,8 +561,8 @@ export function handlePlaceSettlement(
 
     // Check harbors
     for (const harbor of state.board.harbors) {
-      const hVerts = harbor.vertices.map((v) => vertexKey(v));
-      if (hVerts.includes(vertexKey(payload.vertex)) && !player.harbors.includes(harbor.type)) {
+      const hVerts = harbor.vertices.map((v) => vertexKey(canonicalVertex(v)));
+      if (hVerts.includes(vertexKey(canonicalVertex(payload.vertex))) && !player.harbors.includes(harbor.type)) {
         player.harbors.push(harbor.type);
       }
     }
@@ -1533,8 +1543,8 @@ function botTradeAndBuild(gameId: string, state: GameState, bot: Player): void {
       bot.settlementsBuilt += 1;
       // Check harbors
       for (const harbor of state.board.harbors) {
-        const hVerts = harbor.vertices.map((v) => vertexKey(v));
-        if (hVerts.includes(vertexKey(vertex)) && !bot.harbors.includes(harbor.type)) {
+        const hVerts = harbor.vertices.map((v) => vertexKey(canonicalVertex(v)));
+        if (hVerts.includes(vertexKey(canonicalVertex(vertex))) && !bot.harbors.includes(harbor.type)) {
           bot.harbors.push(harbor.type);
         }
       }

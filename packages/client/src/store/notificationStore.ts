@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { sounds } from '../utils/sounds';
 
 export interface Notification {
   id: string;
@@ -34,6 +35,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     }
 
     const id = `notif-${++nextId}`;
+    sounds.error();
     set((s) => ({
       notifications: [...s.notifications, { id, message, type }],
     }));

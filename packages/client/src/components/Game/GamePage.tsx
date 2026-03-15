@@ -1,4 +1,5 @@
 import { assetPath } from '../../utils/sprites';
+import { sounds } from '../../utils/sounds';
 import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, Component, type ReactNode, type ErrorInfo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -267,8 +268,59 @@ function GamePageInner() {
       addNotification(t('errors.noCardsToSteal'));
     }
 
+    // --- Sound effects ---
+    for (const entry of newEntries) {
+      // Dice roll sound
+      if (entry.type === 'roll_dice') {
+        sounds.diceRoll();
+      }
+      // Build placement sound (for my placements)
+      if ((entry.type === 'place_settlement' || entry.type === 'place_road' || entry.type === 'place_city')
+          && entry.playerId === myPlayerId) {
+        sounds.build();
+      }
+      // Chat message from other player
+      if (entry.type === 'chat' && entry.playerId && entry.playerId !== myPlayerId) {
+        sounds.chat();
+      }
+      // Trade completed (I'm involved)
+      if (entry.type === 'trade_completed' && entry.data) {
+        const fromId = entry.data.fromPlayerId as string;
+        const toId = entry.data.toPlayerId as string;
+        if (fromId === myPlayerId || toId === myPlayerId) {
+          sounds.trade();
+        }
+      }
+      // Monopoly played
+      if (entry.type === 'monopoly') {
+        sounds.monopoly();
+      }
+      // Robber moved
+      if (entry.type === 'move_robber') {
+        sounds.robber();
+      }
+    }
+
     if (newItems.length > 0) {
       setAnimationItems((prev) => [...prev, ...newItems]);
+
+      // Play card flick sound for each card gained/lost, staggered at 250ms
+      let flickIdx = 0;
+      for (const item of newItems) {
+        if (item.kind === 'distribute' && item.isMe) {
+          const count = Object.values(item.resources).reduce((a, b) => a + b, 0);
+          for (let i = 0; i < count; i++) {
+            setTimeout(() => sounds.cardFlick(), flickIdx * 250);
+            flickIdx++;
+          }
+        } else if (item.kind === 'outgoing') {
+          const count = Object.values(item.resources).reduce((a, b) => a + b, 0);
+          for (let i = 0; i < count; i++) {
+            setTimeout(() => sounds.cardFlick(), flickIdx * 250);
+            flickIdx++;
+          }
+        }
+      }
     }
   }, [gameState?.log.length, gameState, myPlayerId, addNotification, t]);
 
@@ -322,11 +374,37 @@ function GamePageInner() {
       prevPhaseRef.current = phase;
       setHandSelection({ brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 });
       setClearSelectionCounter((c) => c + 1);
+      sounds.stopClockTick();
     }
   }, [phase]);
 
   // Discard mode
   const mustDiscard = phase === 'discard' && !!myPlayerId && (gameState?.pendingDiscards ?? []).includes(myPlayerId);
+
+  // Sound: play discard sound when I need to discard
+  const prevMustDiscard = useRef(false);
+  useEffect(() => {
+    if (mustDiscard && !prevMustDiscard.current) {
+      sounds.discard();
+    }
+    prevMustDiscard.current = mustDiscard;
+  }, [mustDiscard]);
+
+  // Sound: play longest.wav when longest road or largest army holder changes
+  const longestHolder = gameState?.longestRoadHolder ?? null;
+  const largestHolder = gameState?.largestArmyHolder ?? null;
+  const prevLongestHolder = useRef(longestHolder);
+  const prevLargestHolder = useRef(largestHolder);
+  useEffect(() => {
+    const longestChanged = longestHolder !== prevLongestHolder.current && longestHolder !== null;
+    const largestChanged = largestHolder !== prevLargestHolder.current && largestHolder !== null;
+    prevLongestHolder.current = longestHolder;
+    prevLargestHolder.current = largestHolder;
+    // Don't play if game just ended (gameEnd sound takes priority)
+    if ((longestChanged || largestChanged) && phase !== 'game_over') {
+      sounds.longest();
+    }
+  }, [longestHolder, largestHolder, phase]);
   const discardCount = useMemo(() => {
     if (!mustDiscard || !gameState || !myPlayerId) return 0;
     const player = gameState.players.find(p => p.id === myPlayerId);
@@ -525,6 +603,40 @@ function GamePageInner() {
   const canTrade = myTurn && phase === 'trade_and_build';
   const canEndTurn = myTurn && (phase === 'trade_and_build' || phase === 'special_build');
   const canBuyDevCard = canBuild && phase !== 'special_build';
+
+  // Sound: play turn warning when it's my turn to roll
+  const prevCanRoll = useRef(false);
+  useEffect(() => {
+    if (canRoll && !prevCanRoll.current) {
+      sounds.turnWarning();
+    }
+    prevCanRoll.current = canRoll;
+  }, [canRoll]);
+
+  // Sound: play game end clap
+  useEffect(() => {
+    if (gameResult) {
+      sounds.gameEnd();
+    }
+  }, [gameResult]);
+
+  // Sound: clock ticking when 5 seconds left on turn timer (my turn only)
+  useEffect(() => {
+    if (!myTurn || !gameState) return;
+    const deadline = (gameState as unknown as Record<string, unknown>).turnDeadline as string | null;
+    if (!deadline) return;
+    const deadlineMs = new Date(deadline).getTime();
+    const remaining = deadlineMs - Date.now();
+    const triggerAt = remaining - 5000;
+    if (triggerAt <= 0 && remaining > 0) {
+      sounds.clockTick();
+      return;
+    }
+    if (triggerAt > 0) {
+      const timer = setTimeout(() => sounds.clockTick(), triggerAt);
+      return () => clearTimeout(timer);
+    }
+  }, [(gameState as unknown as Record<string, unknown>)?.turnDeadline, myTurn]);
 
   // Special build opt-in toggle (5+ players)
   const is5PlusGame = (gameState?.players.length ?? 0) >= 5;

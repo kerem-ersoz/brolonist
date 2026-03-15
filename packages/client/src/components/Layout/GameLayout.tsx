@@ -13,7 +13,7 @@ interface GameLayoutProps {
 
 export function GameLayout({ board, playerHand, rightPanel, tradeOffers, dice, endTurnButton, phaseHint, isMyTurn }: GameLayoutProps) {
   return (
-    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0 h-full">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative min-h-0 h-full" onContextMenu={(e) => e.preventDefault()}>
       {/* Main area */}
       <div className="flex-1 flex flex-col min-h-0 relative">
         {/* Phase hint — floating pill, absolutely positioned over the board */}

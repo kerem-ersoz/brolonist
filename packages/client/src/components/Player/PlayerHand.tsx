@@ -139,7 +139,7 @@ export function PlayerHand({
   const gapIndex = hasGaps ? cards.findIndex(c => c.isGap) : -1;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 pointer-events-none" style={{ zIndex: 30 }}>
+    <div className="fixed bottom-0 left-0 right-0 pointer-events-none" style={{ zIndex: 30 }} onContextMenu={(e) => e.preventDefault()}>
 
       {/* Hand area — resource cards + dev cards, pinned to bottom-left */}
       <div className="pointer-events-auto absolute bottom-4 left-6 flex items-end gap-3">

@@ -311,7 +311,8 @@ function GamePageInner() {
       // Robber moved — only play sound if I have a building adjacent to the target hex
       if (entry.type === 'move_robber' && entry.data?.hex && gameState && myPlayerId) {
         const rh = entry.data.hex as { q: number; r: number };
-        const vb = gameState.board.vertexBuildings;
+        const board = gameState.board as BoardType;
+        const vb = board.vertexBuildings;
         const buildings = vb instanceof Map ? vb : new Map(Object.entries(vb || {}));
         let adjacent = false;
         for (const [key, building] of buildings) {
